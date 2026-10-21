@@ -10,6 +10,8 @@ import android.view.Menu
 import android.view.MenuItem
 import android.view.WindowManager
 import android.webkit.CookieManager
+import android.webkit.JsResult
+import android.webkit.WebChromeClient
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.EditText
@@ -79,6 +81,42 @@ class MainActivity : AppCompatActivity() {
             // Default behavior (load everything in this WebView) is
             // correct here: the hub's own UI never links off-hub during
             // normal remote use.
+        }
+
+        // Without a WebChromeClient, Android's default is to silently
+        // dismiss window.alert()/confirm() as "cancelled" — no dialog at
+        // all. app.js relies on confirm() for every destructive action
+        // (delete device, delete activity, discard draft, restore
+        // backup, reboot), so without this they're all dead buttons here.
+        webView.webChromeClient = object : WebChromeClient() {
+            override fun onJsAlert(
+                view: WebView,
+                url: String,
+                message: String,
+                result: JsResult
+            ): Boolean {
+                AlertDialog.Builder(this@MainActivity)
+                    .setMessage(message)
+                    .setCancelable(false)
+                    .setPositiveButton(android.R.string.ok) { _, _ -> result.confirm() }
+                    .show()
+                return true
+            }
+
+            override fun onJsConfirm(
+                view: WebView,
+                url: String,
+                message: String,
+                result: JsResult
+            ): Boolean {
+                AlertDialog.Builder(this@MainActivity)
+                    .setMessage(message)
+                    .setCancelable(false)
+                    .setPositiveButton(android.R.string.ok) { _, _ -> result.confirm() }
+                    .setNegativeButton(android.R.string.cancel) { _, _ -> result.cancel() }
+                    .show()
+                return true
+            }
         }
     }
 
