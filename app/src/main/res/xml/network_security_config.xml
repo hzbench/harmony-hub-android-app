@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Not wired into AndroidManifest.xml yet (see the TODO there) — the hub's
+  LAN IP isn't known until it's rooted and a DHCP reservation is set.
+
+  Once it is: replace HUB_IP_HERE below with that IP (e.g. 192.168.1.50),
+  then switch AndroidManifest.xml's <application> tag from
+  android:usesCleartextTraffic="true" to
+  android:networkSecurityConfig="@xml/network_security_config".
+  That scopes the plaintext-HTTP allowance to exactly the hub's address
+  rather than the whole app.
+-->
+<network-security-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">HUB_IP_HERE</domain>
+    </domain-config>
+</network-security-config>

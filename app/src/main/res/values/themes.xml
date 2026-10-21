@@ -1,0 +1,4 @@
+<resources>
+    <!-- Full-screen WebView host; no app bar needed. -->
+    <style name="Theme.HarmonyRemote" parent="Theme.AppCompat.DayNight.NoActionBar" />
+</resources>
