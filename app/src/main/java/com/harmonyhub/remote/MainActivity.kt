@@ -15,6 +15,7 @@ import android.widget.EditText
 import androidx.activity.addCallback
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.widget.Toolbar
 
 /**
  * Minimal WebView wrapper around the harmony-hub-control local web UI.
@@ -27,9 +28,6 @@ import androidx.appcompat.app.AppCompatActivity
  * into the page's own command pipeline via window.harmonyHardwareVolume()
  * (a small additive hook in app.js). See PLAN.md's "Spec: minimal WebView
  * wrapper with volume-key control" for the full design.
- *
- * Not yet compiled/run — no Android toolchain was available in the
- * environment that wrote this. Open in Android Studio to build and test.
  */
 class MainActivity : AppCompatActivity() {
 
@@ -41,6 +39,7 @@ class MainActivity : AppCompatActivity() {
         setContentView(R.layout.activity_main)
 
         prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        setSupportActionBar(findViewById<Toolbar>(R.id.toolbar))
         webView = findViewById(R.id.webView)
         configureWebView(webView)
 
