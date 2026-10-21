@@ -1,0 +1,6 @@
+<resources>
+    <string name="app_name">Harmony Remote</string>
+    <string name="prompt_hub_address">Hub address (e.g. 192.168.1.50:8080)</string>
+    <string name="action_change_hub">Change hub address</string>
+    <string name="button_save">Save</string>
+</resources>
