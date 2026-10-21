@@ -1,5 +1,27 @@
 <?xml version="1.0" encoding="utf-8"?>
-<WebView xmlns:android="http://schemas.android.com/apk/res/android"
-    android:id="@+id/webView"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
-    android:layout_height="match_parent" />
+    android:layout_height="match_parent"
+    android:orientation="vertical">
+
+    <!--
+      Slim, title-less app bar whose only purpose is to host the overflow
+      menu ("Change hub address") — otherwise there's no way to reach it,
+      since this is a NoActionBar theme and there's no hardware/software
+      menu key on a modern phone. Kept minimal so the hub's own UI below
+      still reads as the whole app, per PLAN.md's "load it unmodified"
+      design goal.
+    -->
+    <androidx.appcompat.widget.Toolbar
+        android:id="@+id/toolbar"
+        android:layout_width="match_parent"
+        android:layout_height="?attr/actionBarSize"
+        android:background="?attr/colorPrimary" />
+
+    <WebView
+        android:id="@+id/webView"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1" />
+
+</LinearLayout>
