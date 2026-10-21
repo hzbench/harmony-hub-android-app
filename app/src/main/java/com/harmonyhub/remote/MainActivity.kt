@@ -8,6 +8,7 @@ import android.text.InputType
 import android.view.KeyEvent
 import android.view.Menu
 import android.view.MenuItem
+import android.view.WindowManager
 import android.webkit.CookieManager
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -37,6 +38,10 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+        // Only takes effect while this Activity is actually in the
+        // foreground — Android drops it automatically the moment you
+        // leave the screen, so normal screen-off timeout resumes then.
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
         prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         setSupportActionBar(findViewById<Toolbar>(R.id.toolbar))
