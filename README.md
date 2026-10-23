@@ -6,10 +6,10 @@ foreground hardware volume-key capture. Full design rationale is in the
 main `PLAN.md`, under "Spec: minimal WebView wrapper with volume-key
 control".
 
-**Status: scaffolded, not yet built or run.** This was written on a
-machine with no Android SDK/JDK/Gradle installed, so nothing here has
-been compiled or verified — treat it as a starting point to open in
-Android Studio, not a tested artifact.
+**Status: builds and runs.** It has been built with Gradle and run on a
+real phone (Pixel 6 Pro) against the hub's web UI, including the
+volume-key hook, the `confirm()`/`alert()` dialogs, keep-screen-on and the
+"Change hub address" menu.
 
 ## Prerequisites
 
@@ -19,16 +19,19 @@ Android Studio, not a tested artifact.
   `window.harmonyHardwareVolume` hook (`../control/payload/www/go.js`; the
   original pages at the root keep their own copy in `app.js`).
 
-## Opening the project
+## Building and running
 
-1. Open this `android-app/` folder in Android Studio.
-2. Let it sync — it will generate the Gradle wrapper jar/scripts (not
-   committed here) and may prompt to upgrade AGP/Kotlin/Gradle from the
-   versions pinned in `build.gradle.kts`/`gradle/wrapper/`; accepting
-   that is fine.
-3. Build and run on a device over USB, or build a release APK
-   (Build > Generate Signed Bundle / APK) and sideload it — this app
-   isn't going through the Play Store.
+From the command line:
+
+```
+./gradlew assembleDebug
+adb install -r app/build/outputs/apk/debug/app-debug.apk
+```
+
+Or open this `android-app/` folder in Android Studio, let it sync, and
+run it on a device over USB. For a release APK use Build > Generate
+Signed Bundle / APK and sideload it — this app isn't going through the
+Play Store.
 
 ## First run
 
