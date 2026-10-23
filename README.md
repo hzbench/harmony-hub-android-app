@@ -15,9 +15,9 @@ Android Studio, not a tested artifact.
 
 - Android Studio (recommended — handles the Gradle wrapper, SDK, and JDK
   for you), or: JDK 17 + Android SDK command-line tools + Gradle 8.7.
-- The companion `app.js` hook (`window.harmonyHardwareVolume`) must exist
-  in the `harmony-hub-control` build this points at — see
-  `../control/payload/www/app.js`, added as part of this same change.
+- The hub must serve the daily-use UI at `/go/` and its
+  `window.harmonyHardwareVolume` hook (`../control/payload/www/go.js`; the
+  original pages at the root keep their own copy in `app.js`).
 
 ## Opening the project
 
@@ -33,7 +33,8 @@ Android Studio, not a tested artifact.
 ## First run
 
 On first launch it asks for the hub's address (`<ip>:8080` or a full
-`http://...` URL) and stores it in `SharedPreferences`. Change it later
+`http://...` URL), stores it in `SharedPreferences`, and loads the hub's
+`/go/` UI (a stored address that already ends in `/go/` works too). Change it later
 via the overflow menu → "Change hub address". There's no discovery
 mechanism by design — set a DHCP reservation for the hub's MAC in your
 router so the address stays stable (see `PLAN.md`).
