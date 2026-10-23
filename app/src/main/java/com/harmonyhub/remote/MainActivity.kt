@@ -23,14 +23,15 @@ import androidx.appcompat.widget.Toolbar
 /**
  * Minimal WebView wrapper around the harmony-hub-control local web UI.
  *
- * The entire remote UI (pairing, devices, activities, settings — see the
- * reviewed app.js/index.html/app.css) is served live by the hub at
- * http://<hub-ip>:8080/ and loaded here completely unmodified. This
- * wrapper adds exactly one native capability on top of it: hardware
- * volume-key capture while this screen is in the foreground, forwarded
- * into the page's own command pipeline via window.harmonyHardwareVolume()
- * (a small additive hook in app.js). See PLAN.md's "Spec: minimal WebView
- * wrapper with volume-key control" for the full design.
+ * The remote UI is served live by the hub and loaded here completely
+ * unmodified: the daily-use screens at http://<hub-ip>:8080/go/ (go.html,
+ * go.js, go.css), which link into the original pages at the root for pairing,
+ * device setup and settings. This wrapper adds exactly one native capability
+ * on top of it: hardware volume-key capture while this screen is in the
+ * foreground, forwarded into the page's own command pipeline via
+ * window.harmonyHardwareVolume() (defined in go.js, and still in app.js for
+ * the original pages). See PLAN.md's "Spec: minimal WebView wrapper with
+ * volume-key control" for the full design.
  */
 class MainActivity : AppCompatActivity() {
 
@@ -63,7 +64,7 @@ class MainActivity : AppCompatActivity() {
         if (hubUrl.isNullOrBlank()) {
             promptForHubAddress()
         } else {
-            webView.loadUrl(hubUrl)
+            webView.loadUrl(entryUrl(hubUrl))
         }
     }
 
@@ -139,7 +140,7 @@ class MainActivity : AppCompatActivity() {
                 }
                 val url = normalizeHubUrl(typed)
                 prefs.edit().putString(KEY_HUB_URL, url).apply()
-                webView.loadUrl(url)
+                webView.loadUrl(entryUrl(url))
             }
             .show()
     }
@@ -150,8 +151,13 @@ class MainActivity : AppCompatActivity() {
             url = "http://$url"
         }
         if (!url.endsWith("/")) url = "$url/"
-        return url
+        // The saved address is the hub itself; the app adds the UI path.
+        return if (url.endsWith("/$ENTRY_PATH")) url.removeSuffix(ENTRY_PATH) else url
     }
+
+    /** The daily-use remote UI the hub serves under /go/ (the original UI stays at the root). */
+    private fun entryUrl(hubUrl: String): String =
+        if (hubUrl.endsWith("/$ENTRY_PATH")) hubUrl else hubUrl.trimEnd('/') + "/$ENTRY_PATH"
 
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
         menu.add(Menu.NONE, MENU_CHANGE_HUB, Menu.NONE, R.string.action_change_hub)
@@ -195,5 +201,6 @@ class MainActivity : AppCompatActivity() {
         private const val PREFS_NAME = "harmony_remote"
         private const val KEY_HUB_URL = "hub_url"
         private const val MENU_CHANGE_HUB = 1
+        private const val ENTRY_PATH = "go/"
     }
 }
