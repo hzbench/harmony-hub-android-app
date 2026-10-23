@@ -3,18 +3,25 @@ package com.harmonyhub.remote
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.SharedPreferences
+import android.graphics.Bitmap
 import android.os.Bundle
 import android.text.InputType
 import android.view.KeyEvent
 import android.view.Menu
 import android.view.MenuItem
+import android.view.View
 import android.view.WindowManager
 import android.webkit.CookieManager
 import android.webkit.JsResult
+import android.webkit.WebResourceError
+import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
 import android.webkit.WebChromeClient
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.widget.Button
 import android.widget.EditText
+import android.widget.TextView
 import androidx.activity.addCallback
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
@@ -37,6 +44,15 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var webView: WebView
     private lateinit var prefs: SharedPreferences
+    private lateinit var errorState: View
+    private lateinit var errorMessage: TextView
+    private lateinit var errorRetry: Button
+    // The page that is loading failed. onPageFinished also fires for Android's own
+    // error page, and for an HTTP error the error callback comes *before*
+    // onPageStarted, so a failure is only forgotten when a different page starts
+    // or when we start a load ourselves.
+    private var loadFailed = false
+    private var failedUrl: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -49,6 +65,13 @@ class MainActivity : AppCompatActivity() {
         prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         setSupportActionBar(findViewById<Toolbar>(R.id.toolbar))
         webView = findViewById(R.id.webView)
+        errorState = findViewById(R.id.errorState)
+        errorMessage = findViewById(R.id.errorMessage)
+        errorRetry = findViewById(R.id.errorRetry)
+        errorRetry.setOnClickListener { retryLoad() }
+        findViewById<Button>(R.id.errorChangeAddress).setOnClickListener {
+            promptForHubAddress(prefs.getString(KEY_HUB_URL, null))
+        }
         configureWebView(webView)
 
         onBackPressedDispatcher.addCallback(this) {
@@ -64,7 +87,7 @@ class MainActivity : AppCompatActivity() {
         if (hubUrl.isNullOrBlank()) {
             promptForHubAddress()
         } else {
-            webView.loadUrl(entryUrl(hubUrl))
+            load(hubUrl)
         }
     }
 
@@ -81,7 +104,35 @@ class MainActivity : AppCompatActivity() {
         webView.webViewClient = object : WebViewClient() {
             // Default behavior (load everything in this WebView) is
             // correct here: the hub's own UI never links off-hub during
-            // normal remote use.
+            // normal remote use. The only additions are the error screen's
+            // hooks, which look at the page itself and ignore sub-resources.
+            override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
+                if (url != failedUrl) loadFailed = false
+            }
+
+            override fun onReceivedError(
+                view: WebView,
+                request: WebResourceRequest,
+                error: WebResourceError
+            ) {
+                if (request.isForMainFrame) showError(request.url.toString(), getString(R.string.error_unreachable, hubLabel()))
+            }
+
+            override fun onReceivedHttpError(
+                view: WebView,
+                request: WebResourceRequest,
+                errorResponse: WebResourceResponse
+            ) {
+                if (!request.isForMainFrame) return
+                val code = errorResponse.statusCode
+                // A hub that predates the new UI has no /go/ page.
+                val message = if (code == 404) R.string.error_no_ui else R.string.error_http
+                showError(request.url.toString(), getString(message, hubLabel(), code))
+            }
+
+            override fun onPageFinished(view: WebView, url: String) {
+                if (!loadFailed) hideError()
+            }
         }
 
         // Without a WebChromeClient, Android's default is to silently
@@ -121,6 +172,41 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun hubLabel(): String =
+        prefs.getString(KEY_HUB_URL, null)?.removePrefix("http://")?.removeSuffix("/") ?: ""
+
+    private fun load(url: String) {
+        loadFailed = false
+        failedUrl = null
+        webView.loadUrl(entryUrl(url))
+    }
+
+    private fun showError(url: String, message: String) {
+        loadFailed = true
+        failedUrl = url
+        errorMessage.text = message
+        errorRetry.isEnabled = true
+        errorRetry.setText(R.string.error_try_again)
+        webView.visibility = View.INVISIBLE
+        errorState.visibility = View.VISIBLE
+    }
+
+    private fun hideError() {
+        errorState.visibility = View.GONE
+        webView.visibility = View.VISIBLE
+    }
+
+    private fun retryLoad() {
+        val hubUrl = prefs.getString(KEY_HUB_URL, null)
+        if (hubUrl.isNullOrBlank()) {
+            promptForHubAddress()
+            return
+        }
+        errorRetry.isEnabled = false
+        errorRetry.setText(R.string.error_trying)
+        load(hubUrl)
+    }
+
     private fun promptForHubAddress(existing: String? = null) {
         val input = EditText(this).apply {
             inputType = InputType.TYPE_CLASS_TEXT
@@ -140,7 +226,7 @@ class MainActivity : AppCompatActivity() {
                 }
                 val url = normalizeHubUrl(typed)
                 prefs.edit().putString(KEY_HUB_URL, url).apply()
-                webView.loadUrl(entryUrl(url))
+                load(url)
             }
             .show()
     }

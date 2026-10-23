@@ -42,6 +42,16 @@ via the overflow menu → "Change hub address". There's no discovery
 mechanism by design — set a DHCP reservation for the hub's MAC in your
 router so the address stays stable (see `PLAN.md`).
 
+## Error screen
+
+If the hub's page can't be loaded, a native screen replaces Android's
+default error page: "Can't reach the hub" with the saved address, **Try
+again** and **Change hub address**. It appears for a main-page failure
+only (hub off, wrong address, different network, or an HTTP error such
+as a hub without the `/go/` UI, which gets its own "update the hub"
+message); failed sub-resources are ignored. It clears when a page loads
+successfully.
+
 ## Cleartext HTTP
 
 The hub serves plain HTTP by design (no TLS — see the main repo's
