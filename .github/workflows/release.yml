@@ -1,20 +1,29 @@
 name: Release
 
-# Push a tag like v0.1.0 (on a commit that is on main and passed the Build workflow) to build the
-# signed APK and publish it as a GitHub Release.
-# Run by hand from main (Actions > Release > Run workflow) to build a signed APK as a downloadable
-# artifact only, without publishing anything.
+# A release is made from main, by changing the VERSION file in a pull request. When a push to main
+# changes VERSION and the Build workflow has passed on that commit, this builds the signed APK, tags
+# the commit v<VERSION> and publishes it as a GitHub Release. A VERSION that already has a tag does
+# nothing, so merging without a bump never releases.
+# Run by hand from main (Actions > Release > Run workflow): with "publish" off it builds a signed APK
+# as a downloadable artifact only; with it on it publishes VERSION the same way a push does (for
+# example to retry after a failure that needed a fix elsewhere).
 on:
   push:
-    tags: ['v[0-9]+.[0-9]+.[0-9]+']
+    branches: [main]
+    paths: [VERSION]
   workflow_dispatch:
+    inputs:
+      publish:
+        description: Publish VERSION as a release (otherwise only build a download)
+        type: boolean
+        default: false
 
 permissions:
   contents: write   # to create the release
   actions: read     # to look up whether the Build workflow passed
 
 concurrency:
-  group: release-${{ github.ref }}
+  group: release
   cancel-in-progress: false
 
 jobs:
@@ -24,7 +33,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0   # to tell whether a tag is on main
+          fetch-depth: 0   # all tags, to check VERSION against earlier releases
 
       - uses: actions/setup-java@v4
         with:
@@ -33,49 +42,60 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
-      - name: Check this commit may be released
+      - name: Work out what to release
+        id: version
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
+          PUBLISH: ${{ github.event_name == 'push' || inputs.publish }}
         run: |
-          if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
-            # Only reviewed code goes out under the real key: the tagged commit must be on main
-            # and the Build workflow (tests and lint) must have passed on it.
-            git fetch --quiet origin main
-            git merge-base --is-ancestor "$GITHUB_SHA" origin/main \
-              || { echo "::error::$GITHUB_REF_NAME is not on main. Merge first, then tag the merge commit."; exit 1; }
+          # A hand-run build is signed with the real key, so only main may be built this way.
+          [[ "$GITHUB_REF" == "refs/heads/main" ]] || { echo "::error::Run this workflow from main."; exit 1; }
+          if [[ "$PUBLISH" != "true" ]]; then
+            # A build to download: version code 1, so it can only be installed fresh, never over a real release.
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            echo "name=0.0.0-dev-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+            echo "code=1" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          version=$(tr -d ' \t\r\n' < VERSION)
+          [[ "$version" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]] || { echo "::error::VERSION must look like 1.2.3 (it is '$version')"; exit 1; }
+          major=${BASH_REMATCH[1]}; minor=${BASH_REMATCH[2]}; patch=${BASH_REMATCH[3]}
+          (( minor <= 99 && patch <= 99 )) || { echo "::error::Minor and patch must be 99 or less"; exit 1; }
+          git fetch --quiet --tags origin
+          if git rev-parse -q --verify "refs/tags/v$version" > /dev/null; then
+            echo "::notice::v$version is already released; nothing to do. Change VERSION to release again."
+            echo "publish=false" >> "$GITHUB_OUTPUT"; echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          newest=$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' | sed 's/^v//' | sort -V | tail -1)
+          if [[ -n "$newest" && "$(printf '%s\n%s\n' "$newest" "$version" | sort -V | tail -1)" != "$version" ]]; then
+            echo "::error::VERSION $version is lower than the newest release $newest; versions only go up."; exit 1
+          fi
+          # Only tested code is signed with the real key. Build runs on the same push, so it may
+          # still be going: wait for it (up to 15 minutes).
+          for attempt in $(seq 1 30); do
             passed=$(gh run list --workflow Build --commit "$GITHUB_SHA" --status success --json databaseId --jq length)
-            [[ "$passed" -gt 0 ]] || { echo "::error::The Build workflow has not passed on this commit."; exit 1; }
-          else
-            # A hand-run build is signed with the real key, so only main may be built this way.
-            [[ "$GITHUB_REF" == "refs/heads/main" ]] || { echo "::error::Run this workflow from main."; exit 1; }
-          fi
-
-      - name: Work out the version
-        id: version
-        shell: bash
-        run: |
-          if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
-            [[ "$GITHUB_REF_NAME" =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+)$ ]] || { echo "::error::The tag must look like v1.2.3"; exit 1; }
-            major=${BASH_REMATCH[1]}; minor=${BASH_REMATCH[2]}; patch=${BASH_REMATCH[3]}
-            (( minor <= 99 && patch <= 99 )) || { echo "::error::Minor and patch must be 99 or less"; exit 1; }
-            name="$major.$minor.$patch"
-            code=$(( major * 10000 + minor * 100 + patch ))
-          else
-            # A hand-run build: version code 1, so it can only be installed fresh, never over a real release.
-            name="0.0.0-dev-${GITHUB_SHA::7}"
-            code=1
-          fi
-          echo "name=$name" >> "$GITHUB_OUTPUT"
-          echo "code=$code" >> "$GITHUB_OUTPUT"
-          echo "Building $name (version code $code)"
+            [[ "$passed" -gt 0 ]] && break
+            running=$(gh run list --workflow Build --commit "$GITHUB_SHA" --json status --jq '[.[] | select(.status != "completed")] | length')
+            [[ "$running" -gt 0 ]] || { echo "::error::The Build workflow has not passed on this commit."; exit 1; }
+            echo "The Build workflow is still running on this commit; waiting..."
+            sleep 30
+          done
+          [[ "$passed" -gt 0 ]] || { echo "::error::The Build workflow did not finish in time."; exit 1; }
+          echo "publish=true" >> "$GITHUB_OUTPUT"
+          echo "name=$version" >> "$GITHUB_OUTPUT"
+          echo "code=$(( major * 10000 + minor * 100 + patch ))" >> "$GITHUB_OUTPUT"
+          echo "Releasing $version (version code $(( major * 10000 + minor * 100 + patch )))"
 
       - name: Unit tests
+        if: steps.version.outputs.skip != 'true'
         run: ./gradlew testDebugUnitTest --no-daemon
 
       # The signing key is only handed to the steps below, after the tests and third-party actions
       # have run; the repository's own build then reads it from a file that is deleted afterwards.
       - name: Restore the signing key
+        if: steps.version.outputs.skip != 'true'
         shell: bash
         env:
           KEYSTORE_BASE64: ${{ secrets.HUBREMOTE_KEYSTORE_BASE64 }}
@@ -96,6 +116,7 @@ jobs:
           echo "HUBREMOTE_SIGNING=$RUNNER_TEMP/signing.properties" >> "$GITHUB_ENV"
 
       - name: Build the signed APK
+        if: steps.version.outputs.skip != 'true'
         run: ./gradlew assembleRelease --no-daemon -PversionName=${{ steps.version.outputs.name }} -PversionCode=${{ steps.version.outputs.code }}
 
       - name: Remove the signing key from the runner
@@ -105,6 +126,7 @@ jobs:
 
       - name: Check the APK
         id: apk
+        if: steps.version.outputs.skip != 'true'
         shell: bash
         env:
           EXPECTED_CERT_SHA256: ${{ vars.HUBREMOTE_CERT_SHA256 }}
@@ -142,16 +164,16 @@ jobs:
           echo "file=$out" >> "$GITHUB_OUTPUT"
 
       - name: Publish the release
-        if: github.ref_type == 'tag'
+        if: steps.version.outputs.publish == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
-          gh release create "$GITHUB_REF_NAME" "${{ steps.apk.outputs.file }}" "${{ steps.apk.outputs.file }}.sha256" \
-            --title "Hub Remote ${{ steps.version.outputs.name }}" --generate-notes --verify-tag
+          gh release create "v${{ steps.version.outputs.name }}" "${{ steps.apk.outputs.file }}" "${{ steps.apk.outputs.file }}.sha256" \
+            --title "Hub Remote ${{ steps.version.outputs.name }}" --generate-notes --target "$GITHUB_SHA"
 
       - name: Keep the APK as a download (hand-run builds)
-        if: github.ref_type != 'tag'
+        if: steps.version.outputs.publish != 'true' && steps.version.outputs.skip != 'true'
         uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.apk.outputs.file }}

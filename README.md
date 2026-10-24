@@ -52,11 +52,11 @@ once friends have it. Debug builds use `...hubremote.debug` and are called "Hub 
    `HUBREMOTE_SIGNING` to the path of a properties file with `storeFile`, `storePassword`,
    `keyAlias` and `keyPassword`. Without any of this, `assembleRelease` makes an
    *unsigned* APK, which is how CI builds.
-2. **Version.** There is one source of truth: the release tag (see *Releases on GitHub*
+2. **Version.** There is one source of truth: the `VERSION` file (see *Releases on GitHub*
    below), which sets `versionName` 1.2.3 and `versionCode` 10203 (major×10000 +
    minor×100 + patch). The defaults in `app/build.gradle.kts` (code 1) are for local builds
    only and can't update anyone, so never hand out a build made with them.
-3. **Build by hand** (normally the tag does this): `./gradlew assembleRelease
+3. **Build by hand** (normally the release workflow does this): `./gradlew assembleRelease
    -PversionName=1.2.3 -PversionCode=10203`, then copy
    `app/build/outputs/apk/release/app-release.apk` to `dist/hub-remote-<version>.apk`
    (`dist/` is not committed). If `signing.properties` exists but is incomplete, or its
@@ -71,18 +71,22 @@ once friends have it. Debug builds use `...hubremote.debug` and are called "Hub 
 
 `.github/workflows/release.yml` builds and publishes the signed APK for you.
 
-- **Publish:** merge to main, then tag the merge commit with a tag like `v0.2.0`
-  (`git tag v0.2.0 && git push origin v0.2.0`). The workflow refuses a tag whose commit is
-  not on main or has not passed the *Build* workflow, so only reviewed, tested code is ever
-  signed with the real key. Only tags of the exact form `vMAJOR.MINOR.PATCH` start it. The
-  workflow runs the unit tests, builds, checks the APK, and creates a GitHub Release
-  named "Hub Remote 0.2.0" with `hub-remote-0.2.0.apk` and its `.sha256` attached and
-  release notes generated from the merged pull requests. The version comes from the tag:
-  `versionName` is `0.2.0` and `versionCode` is major×10000 + minor×100 + patch (`20000`
-  would be 2.0.0), so it always rises as long as the tag does. Minor and patch must be
-  99 or less.
+- **Publish:** change the `VERSION` file (for example `0.3.0`) in the pull request that should
+  ship, and merge it. When a push to main changes `VERSION` and the *Build* workflow has passed
+  on that commit (the release waits up to 15 minutes for it), the workflow builds, checks the
+  APK, tags the commit `v0.3.0` and creates a GitHub Release named "Hub Remote 0.3.0" with
+  `hub-remote-0.3.0.apk` and its `.sha256` attached, notes generated from the merged pull
+  requests. Merging without touching `VERSION` releases nothing; a `VERSION` that already has a
+  tag does nothing (a notice in the run says so); a `VERSION` lower than the newest release
+  fails, since versions only go up. `versionName` is the version and `versionCode` is
+  major×10000 + minor×100 + patch (`20000` would be 2.0.0), so it always rises with it. Minor and
+  patch must be 99 or less. Nothing is released from any other branch, and tags pushed by hand
+  do nothing.
+- **Retry:** if a release run fails, fix the cause and re-run the failed run (Actions > the run >
+  Re-run jobs) for a problem outside the repository, or use Actions > Release > Run workflow on
+  main with *publish* ticked once the fix is merged.
 - **Try the pipeline without publishing:** Actions > Release > Run workflow (it only runs
-  from `main`) builds a signed APK (version code 1, so it can only be installed fresh) and
+  from `main`, with *publish* off) builds a signed APK (version code 1, so it can only be installed fresh) and
   keeps it as a download for a week.
 - **Where the key is:** in the repository's Actions secrets `HUBREMOTE_KEYSTORE_BASE64`,
   `HUBREMOTE_STORE_PASSWORD`, `HUBREMOTE_KEY_ALIAS` and `HUBREMOTE_KEY_PASSWORD`, plus the
@@ -101,6 +105,13 @@ once friends have it. Debug builds use `...hubremote.debug` and are called "Hub 
 
 This is a sideloaded build, not a Play Store one: the Play Store would need the app
 bundle (`bundleRelease`), a developer account and a newer target SDK (API 36).
+
+## Which hub software it needs
+
+The app loads the hub's own `/go/` page, so most features arrive with hub software, not with
+an app update. The app needs a hub release that serves `/go/`; **Setup > Software update**
+(choosing the update file) needs app 0.2.0 or newer and a hub release that has
+`GET /api/v1/updates/status`. Hub releases are made in the `harmony-hub-control` repository.
 
 ## Tests and CI
 
