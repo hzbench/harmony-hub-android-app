@@ -12,6 +12,7 @@ import android.view.MenuItem
 import android.view.View
 import android.view.WindowManager
 import android.webkit.CookieManager
+import android.webkit.JavascriptInterface
 import android.webkit.JsResult
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
@@ -66,6 +67,7 @@ class MainActivity : AppCompatActivity() {
 
         prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         setSupportActionBar(findViewById<Toolbar>(R.id.toolbar))
+        showHubTitle()
         webView = findViewById(R.id.webView)
         errorState = findViewById(R.id.errorState)
         errorMessage = findViewById(R.id.errorMessage)
@@ -112,6 +114,9 @@ class MainActivity : AppCompatActivity() {
         // Same-origin first-party cookies only (the pairing cookie). The
         // UI makes no third-party requests during normal remote use.
         CookieManager.getInstance().setAcceptCookie(true)
+
+        // The hub's page tells the app the hub's name so it can head the toolbar.
+        webView.addJavascriptInterface(HubBridge(), "HarmonyNative")
 
         webView.webViewClient = object : WebViewClient() {
             // Default behavior (load everything in this WebView) is
@@ -184,6 +189,23 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /** The toolbar shows the hub's name, or its address until the hub has one. */
+    private fun showHubTitle() {
+        supportActionBar?.title =
+            HubAddress.title(prefs.getString(KEY_HUB_NAME, null), prefs.getString(KEY_HUB_URL, null))
+    }
+
+    /** Called by the hub's own page (a bridge thread, not the UI thread). */
+    private inner class HubBridge {
+        @JavascriptInterface
+        fun setHubName(name: String) {
+            runOnUiThread {
+                prefs.edit().putString(KEY_HUB_NAME, name.take(HubAddress.NAME_MAX)).apply()
+                showHubTitle()
+            }
+        }
+    }
+
     private fun hubLabel(): String = HubAddress.label(prefs.getString(KEY_HUB_URL, null))
 
     private fun load(url: String) {
@@ -242,7 +264,11 @@ class MainActivity : AppCompatActivity() {
                     return@setPositiveButton
                 }
                 val url = HubAddress.normalize(typed)
-                prefs.edit().putString(KEY_HUB_URL, url).apply()
+                // A different hub has a different name; the page reports it once loaded.
+                val editor = prefs.edit().putString(KEY_HUB_URL, url)
+                if (url != existing) editor.remove(KEY_HUB_NAME)
+                editor.apply()
+                showHubTitle()
                 load(url)
             }
             .show()
@@ -289,6 +315,7 @@ class MainActivity : AppCompatActivity() {
     companion object {
         private const val PREFS_NAME = "harmony_remote"
         private const val KEY_HUB_URL = "hub_url"
+        private const val KEY_HUB_NAME = "hub_name"
         private const val MENU_CHANGE_HUB = 1
     }
 }
