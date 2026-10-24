@@ -47,6 +47,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var errorState: View
     private lateinit var errorMessage: TextView
     private lateinit var errorRetry: Button
+    private lateinit var loadingState: View
+    private lateinit var loadingMessage: TextView
     // The page that is loading failed. onPageFinished also fires for Android's own
     // error page, and for an HTTP error the error callback comes *before*
     // onPageStarted, so a failure is only forgotten when a different page starts
@@ -68,6 +70,8 @@ class MainActivity : AppCompatActivity() {
         errorState = findViewById(R.id.errorState)
         errorMessage = findViewById(R.id.errorMessage)
         errorRetry = findViewById(R.id.errorRetry)
+        loadingState = findViewById(R.id.loadingState)
+        loadingMessage = findViewById(R.id.loadingMessage)
         errorRetry.setOnClickListener { retryLoad() }
         findViewById<Button>(R.id.errorChangeAddress).setOnClickListener {
             promptForHubAddress(prefs.getString(KEY_HUB_URL, null))
@@ -178,21 +182,29 @@ class MainActivity : AppCompatActivity() {
     private fun load(url: String) {
         loadFailed = false
         failedUrl = null
+        showLoading()
         webView.loadUrl(entryUrl(url))
+    }
+
+    private fun showLoading() {
+        loadingMessage.text = getString(R.string.loading_hub, hubLabel())
+        errorState.visibility = View.GONE
+        loadingState.visibility = View.VISIBLE
+        webView.visibility = View.INVISIBLE
     }
 
     private fun showError(url: String, message: String) {
         loadFailed = true
         failedUrl = url
         errorMessage.text = message
-        errorRetry.isEnabled = true
-        errorRetry.setText(R.string.error_try_again)
+        loadingState.visibility = View.GONE
         webView.visibility = View.INVISIBLE
         errorState.visibility = View.VISIBLE
     }
 
     private fun hideError() {
         errorState.visibility = View.GONE
+        loadingState.visibility = View.GONE
         webView.visibility = View.VISIBLE
     }
 
@@ -202,8 +214,6 @@ class MainActivity : AppCompatActivity() {
             promptForHubAddress()
             return
         }
-        errorRetry.isEnabled = false
-        errorRetry.setText(R.string.error_trying)
         load(hubUrl)
     }
 

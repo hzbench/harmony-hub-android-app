@@ -30,6 +30,36 @@
             android:layout_height="match_parent" />
 
         <!--
+          Shown while a load that the app started (launch, Try again, a new
+          hub address) is in flight, so a slow or unreachable hub isn't a
+          blank screen. Replaced by the page, or by the error screen.
+        -->
+        <LinearLayout
+            android:id="@+id/loadingState"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="?android:attr/colorBackground"
+            android:gravity="center"
+            android:orientation="vertical"
+            android:padding="32dp"
+            android:visibility="gone">
+
+            <ProgressBar
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:indeterminate="true" />
+
+            <TextView
+                android:id="@+id/loadingMessage"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="20dp"
+                android:gravity="center"
+                android:textAppearance="@style/TextAppearance.AppCompat.Body1"
+                android:textColor="?android:attr/textColorSecondary" />
+        </LinearLayout>
+
+        <!--
           Shown over the WebView when the page can't be loaded at all (hub
           off, wrong address, not on the same network, or the hub has no
           /go/ UI). Nothing has loaded to show a web-based error, so this

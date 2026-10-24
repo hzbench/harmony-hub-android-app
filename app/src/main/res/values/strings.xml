@@ -8,5 +8,5 @@
     <string name="error_no_ui">The hub at %1$s answered, but it doesn’t have the new remote screens (error %2$d). Update the hub’s software, then try again.</string>
     <string name="error_http">The hub at %1$s answered with an error (%2$d). Try again in a moment.</string>
     <string name="error_try_again">Try again</string>
-    <string name="error_trying">Trying…</string>
+    <string name="loading_hub">Connecting to %1$s…</string>
 </resources>
