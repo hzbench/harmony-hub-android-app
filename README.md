@@ -1,4 +1,4 @@
-# Harmony Remote (Android WebView wrapper)
+# Hub Remote (Android WebView wrapper)
 
 Minimal Android app that hosts the `harmony-hub-control` web UI (loaded
 live from the hub, unmodified) and adds exactly one native capability:
@@ -32,6 +32,34 @@ Or open this `android-app/` folder in Android Studio, let it sync, and
 run it on a device over USB. For a release APK use Build > Generate
 Signed Bundle / APK and sideload it — this app isn't going through the
 Play Store.
+
+## Release APK (for you and friends)
+
+The app's id is `io.github.mpdeglau.hubremote` (the code's package is still
+`com.harmonyhub.remote`). The id is the app's identity on a phone, so don't change it
+once friends have it. Debug builds use `...hubremote.debug` and are called "Hub Remote
+(debug)", so both can be installed together.
+
+1. **Signing key.** It lives outside the repo, in `~/.hub-remote-signing/`
+   (`hub-remote-release.jks` and `signing.properties`, owner-only). **Back both up
+   somewhere safe.** Android only installs an update over an existing copy when it is
+   signed with the same key, so if the key is lost every friend has to uninstall and
+   reinstall (losing their saved hub address). To use a different place, set
+   `HUBREMOTE_SIGNING` to the path of a properties file with `storeFile`, `storePassword`,
+   `keyAlias` and `keyPassword`. Without any of this, `assembleRelease` makes an
+   *unsigned* APK, which is how CI builds.
+2. **Version.** Raise `versionCode` in `app/build.gradle.kts` for every build you hand
+   out (and `versionName` to taste); a lower or equal code will not install as an update.
+3. **Build.** `./gradlew assembleRelease`, then copy
+   `app/build/outputs/apk/release/app-release.apk` to `dist/hub-remote-<version>.apk`
+   (`dist/` is not committed).
+4. **Check.** `apksigner verify --print-certs app-release.apk` and
+   `aapt dump badging app-release.apk` (package, version, label).
+5. **Install.** Send the APK to a friend; on their phone they allow "Install unknown
+   apps" for whatever app they opened it from. It needs Android 8 or newer.
+
+This is a sideloaded build, not a Play Store one: the Play Store would need the app
+bundle (`bundleRelease`), a developer account and a newer target SDK (API 36).
 
 ## Tests and CI
 
