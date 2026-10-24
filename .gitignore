@@ -7,3 +7,8 @@
 app/build/
 /captures/
 .cxx/
+# Never commit signing material
+*.jks
+*.keystore
+signing.properties
+/dist/
