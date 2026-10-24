@@ -1,30 +1,100 @@
 name: Release
 
-# Push a tag like v0.1.0 (on a commit that is on main and passed the Build workflow) to build the
-# signed APK and publish it as a GitHub Release.
-# Run by hand from main (Actions > Release > Run workflow) to build a signed APK as a downloadable
-# artifact only, without publishing anything.
+# A release is made from main, by changing the VERSION file in a pull request. When a push to main
+# changes VERSION and the Build workflow has passed on that commit, this builds the signed APK, tags
+# the commit v<VERSION> and publishes it as a GitHub Release. A VERSION that already has a tag does
+# nothing, so merging without a bump never releases.
+# Run by hand from main (Actions > Release > Run workflow): with "publish" off it builds a signed APK
+# as a downloadable artifact only; with it on it publishes VERSION the same way a push does (for
+# example to retry after a failure that needed a fix elsewhere).
 on:
   push:
-    tags: ['v[0-9]+.[0-9]+.[0-9]+']
+    branches: [main]
+    paths: [VERSION]
   workflow_dispatch:
+    inputs:
+      publish:
+        description: Publish VERSION as a release (otherwise only build a download)
+        type: boolean
+        default: false
 
 permissions:
-  contents: write   # to create the release
-  actions: read     # to look up whether the Build workflow passed
+  contents: read
 
 concurrency:
-  group: release-${{ github.ref }}
+  group: release-${{ github.sha }}
   cancel-in-progress: false
 
 jobs:
-  release:
+  plan:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read   # to look up whether the Build workflow passed
     timeout-minutes: 30
+    outputs:
+      skip: ${{ steps.plan.outputs.skip }}
+      publish: ${{ steps.plan.outputs.publish }}
+      version: ${{ steps.plan.outputs.version }}
+      code: ${{ steps.plan.outputs.code }}
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0   # to tell whether a tag is on main
+          fetch-depth: 0   # all tags, to check VERSION against earlier releases
+
+      - name: Work out what to release
+        id: plan
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PUBLISH: ${{ github.event_name == 'push' || inputs.publish }}
+        run: |
+          skip=false; publish=false; version="0.0.0-dev-${GITHUB_SHA::7}"; code=1
+          # Written once, whichever way this exits.
+          trap '{ echo "skip=$skip"; echo "publish=$publish"; echo "version=$version"; echo "code=$code"; } >> "$GITHUB_OUTPUT"' EXIT
+          # A hand-run build is signed with the real key, so only main may be built this way.
+          [[ "$GITHUB_REF" == "refs/heads/main" ]] || { echo "::error::Run this workflow from main."; exit 1; }
+          [[ "$PUBLISH" == "true" ]] || exit 0
+          version=$(tr -d ' \t\r\n' < VERSION)
+          [[ "$version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]?)\.(0|[1-9][0-9]?)$ ]] || { echo "::error::VERSION must look like 1.2.3 without leading zeros, minor and patch 0-99 (it is '$version')"; exit 1; }
+          code=$(( ${BASH_REMATCH[1]} * 10000 + ${BASH_REMATCH[2]} * 100 + ${BASH_REMATCH[3]} ))
+          # Released means a published GitHub Release exists; a tag left by a failed run does not count.
+          if [[ "$(gh release view "v$version" --json isDraft --jq .isDraft 2>/dev/null)" == "false" ]]; then
+            echo "::notice::v$version is already released; nothing to do. Change VERSION to release again."
+            skip=true; exit 0
+          fi
+          git fetch --quiet --tags origin
+          newest=$(git tag --list | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sed 's/^v//' | sort -V | tail -1 || true)
+          if [[ -n "$newest" && "$(printf '%s\n%s\n' "$newest" "$version" | sort -V | tail -1)" != "$version" ]]; then
+            echo "::error::VERSION $version is lower than the newest release $newest; versions only go up."; exit 1
+          fi
+          # Only tested code is signed with the real key. Build runs on the same push, so it may not
+          # be listed yet, or may still be going: wait for it (a few minutes to appear, 15 to finish).
+          for attempt in $(seq 1 30); do
+            passed=$(gh run list --workflow Build --commit "$GITHUB_SHA" --status success --json databaseId --jq length)
+            [[ "$passed" -gt 0 ]] && break
+            listed=$(gh run list --workflow Build --commit "$GITHUB_SHA" --json databaseId --jq length)
+            running=$(gh run list --workflow Build --commit "$GITHUB_SHA" --json status --jq '[.[] | select(.status != "completed")] | length')
+            if [[ "$listed" -gt 0 && "$running" -eq 0 ]]; then
+              echo "::error::The Build workflow ran on this commit and did not pass."; exit 1
+            fi
+            [[ "$listed" -gt 0 || "$attempt" -le 6 ]] || { echo "::error::No Build run was found for this commit."; exit 1; }
+            echo "Waiting for the Build workflow on this commit..."
+            sleep 30
+          done
+          [[ "$passed" -gt 0 ]] || { echo "::error::The Build workflow did not finish in time."; exit 1; }
+          publish=true
+          echo "Releasing $version"
+
+  release:
+    needs: plan
+    if: needs.plan.outputs.skip != 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # to create the release
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
 
       - uses: actions/setup-java@v4
         with:
@@ -32,43 +102,6 @@ jobs:
           java-version: '17'
 
       - uses: gradle/actions/setup-gradle@v4
-
-      - name: Check this commit may be released
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
-            # Only reviewed code goes out under the real key: the tagged commit must be on main
-            # and the Build workflow (tests and lint) must have passed on it.
-            git fetch --quiet origin main
-            git merge-base --is-ancestor "$GITHUB_SHA" origin/main \
-              || { echo "::error::$GITHUB_REF_NAME is not on main. Merge first, then tag the merge commit."; exit 1; }
-            passed=$(gh run list --workflow Build --commit "$GITHUB_SHA" --status success --json databaseId --jq length)
-            [[ "$passed" -gt 0 ]] || { echo "::error::The Build workflow has not passed on this commit."; exit 1; }
-          else
-            # A hand-run build is signed with the real key, so only main may be built this way.
-            [[ "$GITHUB_REF" == "refs/heads/main" ]] || { echo "::error::Run this workflow from main."; exit 1; }
-          fi
-
-      - name: Work out the version
-        id: version
-        shell: bash
-        run: |
-          if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
-            [[ "$GITHUB_REF_NAME" =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+)$ ]] || { echo "::error::The tag must look like v1.2.3"; exit 1; }
-            major=${BASH_REMATCH[1]}; minor=${BASH_REMATCH[2]}; patch=${BASH_REMATCH[3]}
-            (( minor <= 99 && patch <= 99 )) || { echo "::error::Minor and patch must be 99 or less"; exit 1; }
-            name="$major.$minor.$patch"
-            code=$(( major * 10000 + minor * 100 + patch ))
-          else
-            # A hand-run build: version code 1, so it can only be installed fresh, never over a real release.
-            name="0.0.0-dev-${GITHUB_SHA::7}"
-            code=1
-          fi
-          echo "name=$name" >> "$GITHUB_OUTPUT"
-          echo "code=$code" >> "$GITHUB_OUTPUT"
-          echo "Building $name (version code $code)"
 
       - name: Unit tests
         run: ./gradlew testDebugUnitTest --no-daemon
@@ -96,7 +129,7 @@ jobs:
           echo "HUBREMOTE_SIGNING=$RUNNER_TEMP/signing.properties" >> "$GITHUB_ENV"
 
       - name: Build the signed APK
-        run: ./gradlew assembleRelease --no-daemon -PversionName=${{ steps.version.outputs.name }} -PversionCode=${{ steps.version.outputs.code }}
+        run: ./gradlew assembleRelease --no-daemon -PversionName=${{ needs.plan.outputs.version }} -PversionCode=${{ needs.plan.outputs.code }}
 
       - name: Remove the signing key from the runner
         if: always()
@@ -108,8 +141,8 @@ jobs:
         shell: bash
         env:
           EXPECTED_CERT_SHA256: ${{ vars.HUBREMOTE_CERT_SHA256 }}
-          WANT_VERSION_NAME: ${{ steps.version.outputs.name }}
-          WANT_VERSION_CODE: ${{ steps.version.outputs.code }}
+          WANT_VERSION_NAME: ${{ needs.plan.outputs.version }}
+          WANT_VERSION_CODE: ${{ needs.plan.outputs.code }}
         run: |
           [[ -n "$EXPECTED_CERT_SHA256" ]] || { echo "::error::The variable HUBREMOTE_CERT_SHA256 is not set (see the README, Release APK)"; exit 1; }
           # The newest build-tools that actually has both tools (a preview directory may not).
@@ -142,16 +175,19 @@ jobs:
           echo "file=$out" >> "$GITHUB_OUTPUT"
 
       - name: Publish the release
-        if: github.ref_type == 'tag'
+        if: needs.plan.outputs.publish == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
-          gh release create "$GITHUB_REF_NAME" "${{ steps.apk.outputs.file }}" "${{ steps.apk.outputs.file }}.sha256" \
-            --title "Hub Remote ${{ steps.version.outputs.name }}" --generate-notes --verify-tag
+          tag="v${{ needs.plan.outputs.version }}"
+          # A failed earlier attempt can leave an unpublished draft behind; replace it.
+          if [[ "$(gh release view "$tag" --json isDraft --jq .isDraft 2>/dev/null)" == "true" ]]; then gh release delete "$tag" --yes; fi
+          gh release create "$tag" "${{ steps.apk.outputs.file }}" "${{ steps.apk.outputs.file }}.sha256" \
+            --title "Hub Remote ${{ needs.plan.outputs.version }}" --generate-notes --target "$GITHUB_SHA"
 
       - name: Keep the APK as a download (hand-run builds)
-        if: github.ref_type != 'tag'
+        if: needs.plan.outputs.publish != 'true'
         uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.apk.outputs.file }}
