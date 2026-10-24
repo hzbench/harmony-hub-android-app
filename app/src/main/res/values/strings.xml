@@ -9,4 +9,9 @@
     <string name="error_http">The hub at %1$s answered with an error (%2$d). Try again in a moment.</string>
     <string name="error_try_again">Try again</string>
     <string name="loading_hub">Connecting to %1$s…</string>
+    <string name="lock_screen_channel">Remote controls</string>
+    <string name="lock_screen_text">Tap to open the remote</string>
+    <string name="lock_screen_nothing_running">Nothing is running.</string>
+    <string name="lock_screen_no_hub">No hub address is set.</string>
+    <string name="lock_screen_slow">The hub is slow to answer. Try again.</string>
 </resources>
