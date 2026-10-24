@@ -9,6 +9,20 @@ plugins {
 // Without it the release build is simply unsigned, so CI and anyone else can still build.
 val signingFile = file(System.getenv("HUBREMOTE_SIGNING") ?: "${System.getProperty("user.home")}/.hub-remote-signing/signing.properties")
 val signing = Properties().apply { if (signingFile.exists()) signingFile.inputStream().use { load(it) } }
+// A signing file that is there but unusable must not break every build with an obscure error, and must
+// never quietly produce an unsigned release (friends couldn't update over it): say what is wrong, and
+// stop only when a release is actually being built.
+val signingProblem: String? = when {
+    !signingFile.exists() -> null   // nothing set up: an unsigned release, which is what CI's pull-request builds make
+    listOf("storeFile", "storePassword", "keyAlias", "keyPassword").any { signing.getProperty(it).isNullOrBlank() } ->
+        "$signingFile must define storeFile, storePassword, keyAlias and keyPassword."
+    !file(signing.getProperty("storeFile")).exists() -> "The keystore ${signing.getProperty("storeFile")} (from $signingFile) does not exist."
+    else -> null
+}
+if (signingProblem != null) {
+    if (gradle.startParameter.taskNames.any { it.contains("Release", ignoreCase = true) }) throw GradleException(signingProblem)
+    logger.warn("Release signing is not usable: $signingProblem")
+}
 
 android {
     namespace = "com.harmonyhub.remote"
@@ -21,15 +35,16 @@ android {
         // Android 8.0+. Lower this if your phone is older than that.
         minSdk = 26
         targetSdk = 34
-        // Android only installs an update over an existing copy when versionCode is higher, so it
-        // must rise with every build handed out. The GitHub release workflow passes both from the
-        // version tag (-PversionName=1.2.3 -PversionCode=10203); these are the local defaults.
+        // The version comes from the release tag: the GitHub workflow passes -PversionName=1.2.3
+        // -PversionCode=10203 (major*10000 + minor*100 + patch). These defaults are for local
+        // builds only. A build with the default code 1 can't update anyone's existing install, so
+        // never hand one out; pass both properties if you build a release by hand.
         versionCode = (project.findProperty("versionCode") as String?)?.toInt() ?: 1
-        versionName = project.findProperty("versionName") as String? ?: "0.1.0"
+        versionName = project.findProperty("versionName") as String? ?: "0.0.0-local"
     }
 
     signingConfigs {
-        if (signing.isNotEmpty()) {
+        if (signingFile.exists() && signingProblem == null) {
             create("release") {
                 storeFile = file(signing.getProperty("storeFile"))
                 storePassword = signing.getProperty("storePassword")

@@ -1,15 +1,17 @@
 name: Release
 
-# Push a tag like v0.1.0 to build the signed APK and publish it as a GitHub Release.
-# Run by hand (Actions > Release > Run workflow) to build a signed APK as a downloadable
+# Push a tag like v0.1.0 (on a commit that is on main and passed the Build workflow) to build the
+# signed APK and publish it as a GitHub Release.
+# Run by hand from main (Actions > Release > Run workflow) to build a signed APK as a downloadable
 # artifact only, without publishing anything.
 on:
   push:
-    tags: ['v*']
+    tags: ['v[0-9]+.[0-9]+.[0-9]+']
   workflow_dispatch:
 
 permissions:
   contents: write   # to create the release
+  actions: read     # to look up whether the Build workflow passed
 
 concurrency:
   group: release-${{ github.ref }}
@@ -19,17 +21,10 @@ jobs:
   release:
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    env:
-      # Repository secrets (Settings > Secrets and variables > Actions). The key never touches the repo.
-      KEYSTORE_BASE64: ${{ secrets.HUBREMOTE_KEYSTORE_BASE64 }}
-      STORE_PASSWORD: ${{ secrets.HUBREMOTE_STORE_PASSWORD }}
-      KEY_ALIAS: ${{ secrets.HUBREMOTE_KEY_ALIAS }}
-      KEY_PASSWORD: ${{ secrets.HUBREMOTE_KEY_PASSWORD }}
-      # Repository variable: the SHA-256 of the signing certificate. The build fails if the key
-      # it was given is a different one, so a wrong secret can't produce an APK that won't update.
-      EXPECTED_CERT_SHA256: ${{ vars.HUBREMOTE_CERT_SHA256 }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # to tell whether a tag is on main
 
       - uses: actions/setup-java@v4
         with:
@@ -37,6 +32,24 @@ jobs:
           java-version: '17'
 
       - uses: gradle/actions/setup-gradle@v4
+
+      - name: Check this commit may be released
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
+            # Only reviewed code goes out under the real key: the tagged commit must be on main
+            # and the Build workflow (tests and lint) must have passed on it.
+            git fetch --quiet origin main
+            git merge-base --is-ancestor "$GITHUB_SHA" origin/main \
+              || { echo "::error::$GITHUB_REF_NAME is not on main. Merge first, then tag the merge commit."; exit 1; }
+            passed=$(gh run list --workflow Build --commit "$GITHUB_SHA" --status success --json databaseId --jq length)
+            [[ "$passed" -gt 0 ]] || { echo "::error::The Build workflow has not passed on this commit."; exit 1; }
+          else
+            # A hand-run build is signed with the real key, so only main may be built this way.
+            [[ "$GITHUB_REF" == "refs/heads/main" ]] || { echo "::error::Run this workflow from main."; exit 1; }
+          fi
 
       - name: Work out the version
         id: version
@@ -57,19 +70,22 @@ jobs:
           echo "code=$code" >> "$GITHUB_OUTPUT"
           echo "Building $name (version code $code)"
 
-      - name: Check the signing secrets are there
-        shell: bash
-        run: |
-          for v in KEYSTORE_BASE64 STORE_PASSWORD KEY_ALIAS KEY_PASSWORD EXPECTED_CERT_SHA256; do
-            [[ -n "${!v}" ]] || { echo "::error::$v is not set (see the README, Release APK)"; exit 1; }
-          done
-
       - name: Unit tests
         run: ./gradlew testDebugUnitTest --no-daemon
 
+      # The signing key is only handed to the steps below, after the tests and third-party actions
+      # have run; the repository's own build then reads it from a file that is deleted afterwards.
       - name: Restore the signing key
         shell: bash
+        env:
+          KEYSTORE_BASE64: ${{ secrets.HUBREMOTE_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.HUBREMOTE_STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.HUBREMOTE_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.HUBREMOTE_KEY_PASSWORD }}
         run: |
+          for v in KEYSTORE_BASE64 STORE_PASSWORD KEY_ALIAS KEY_PASSWORD; do
+            [[ -n "${!v}" ]] || { echo "::error::The secret for $v is not set (see the README, Release APK)"; exit 1; }
+          done
           printf '%s' "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/hub-remote-release.jks"
           {
             echo "storeFile=$RUNNER_TEMP/hub-remote-release.jks"
@@ -82,28 +98,48 @@ jobs:
       - name: Build the signed APK
         run: ./gradlew assembleRelease --no-daemon -PversionName=${{ steps.version.outputs.name }} -PversionCode=${{ steps.version.outputs.code }}
 
-      - name: Check the APK
-        id: apk
-        shell: bash
-        run: |
-          tools=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
-          src=app/build/outputs/apk/release/app-release.apk
-          "$tools/apksigner" verify --verbose --print-certs "$src" > "$RUNNER_TEMP/certs.txt" 2>&1 || { cat "$RUNNER_TEMP/certs.txt"; echo "::error::The APK's signature does not verify"; exit 1; }
-          # Older apksigner prints "Signer #1 certificate ...", newer "V2 Signer: certificate ...".
-          cert=$(awk '/certificate SHA-256 digest/ && !/public key/ {print $NF; exit}' "$RUNNER_TEMP/certs.txt")
-          [[ -n "$cert" && "${cert,,}" == "${EXPECTED_CERT_SHA256,,}" ]] || { cat "$RUNNER_TEMP/certs.txt"; echo "::error::Not signed with the expected key (got '$cert')"; exit 1; }
-          badging=$("$tools/aapt" dump badging "$src")
-          grep -q "name='io.github.mpdeglau.hubremote' versionCode='${{ steps.version.outputs.code }}' versionName='${{ steps.version.outputs.name }}'" <<<"$badging" \
-            || { echo "::error::The APK's package or version is not what was asked for"; exit 1; }
-          out="hub-remote-${{ steps.version.outputs.name }}.apk"
-          cp "$src" "$out"
-          sha256sum "$out" > "$out.sha256"
-          echo "file=$out" >> "$GITHUB_OUTPUT"
-
       - name: Remove the signing key from the runner
         if: always()
         shell: bash
         run: rm -f "$RUNNER_TEMP/hub-remote-release.jks" "$RUNNER_TEMP/signing.properties"
+
+      - name: Check the APK
+        id: apk
+        shell: bash
+        env:
+          EXPECTED_CERT_SHA256: ${{ vars.HUBREMOTE_CERT_SHA256 }}
+          WANT_VERSION_NAME: ${{ steps.version.outputs.name }}
+          WANT_VERSION_CODE: ${{ steps.version.outputs.code }}
+        run: |
+          [[ -n "$EXPECTED_CERT_SHA256" ]] || { echo "::error::The variable HUBREMOTE_CERT_SHA256 is not set (see the README, Release APK)"; exit 1; }
+          # The newest build-tools that actually has both tools (a preview directory may not).
+          tools=""
+          for d in $(ls -d "$ANDROID_HOME"/build-tools/* | sort -V -r); do
+            [[ -x "$d/apksigner" && -x "$d/aapt" ]] && { tools="$d"; break; }
+          done
+          [[ -n "$tools" ]] || { echo "::error::No build-tools directory with apksigner and aapt"; exit 1; }
+          src=app/build/outputs/apk/release/app-release.apk
+
+          "$tools/apksigner" verify --verbose --print-certs "$src" > "$RUNNER_TEMP/certs.txt" 2>&1 \
+            || { cat "$RUNNER_TEMP/certs.txt"; echo "::error::The APK's signature does not verify"; exit 1; }
+          # Older apksigner prints "Signer #1 certificate ...", newer "V2 Signer: certificate ...".
+          norm() { printf '%s' "$1" | tr -d ': \t\r\n' | tr 'A-F' 'a-f'; }   # hex with or without colons
+          cert=$(awk '/certificate SHA-256 digest/ && !/public key/ {print $NF; exit}' "$RUNNER_TEMP/certs.txt")
+          [[ -n "$cert" && "$(norm "$cert")" == "$(norm "$EXPECTED_CERT_SHA256")" ]] \
+            || { cat "$RUNNER_TEMP/certs.txt"; echo "::error::Not signed with the expected key (got '$cert')"; exit 1; }
+
+          badging=$("$tools/aapt" dump badging "$src")
+          pkg=$(sed -n "s/^package: name='\([^']*\)'.*/\1/p" <<<"$badging")
+          code=$(sed -n "s/^package:.* versionCode='\([^']*\)'.*/\1/p" <<<"$badging")
+          vname=$(sed -n "s/^package:.* versionName='\([^']*\)'.*/\1/p" <<<"$badging")
+          [[ "$pkg" == "io.github.mpdeglau.hubremote" ]] || { echo "::error::The APK's package is '$pkg'"; exit 1; }
+          [[ "$code" == "$WANT_VERSION_CODE" ]] || { echo "::error::The APK's version code is '$code', not $WANT_VERSION_CODE"; exit 1; }
+          [[ "$vname" == "$WANT_VERSION_NAME" ]] || { echo "::error::The APK's version name is '$vname', not $WANT_VERSION_NAME"; exit 1; }
+
+          out="hub-remote-$WANT_VERSION_NAME.apk"
+          cp "$src" "$out"
+          sha256sum "$out" > "$out.sha256"
+          echo "file=$out" >> "$GITHUB_OUTPUT"
 
       - name: Publish the release
         if: github.ref_type == 'tag'

@@ -37,7 +37,7 @@ jobs:
       - name: Keep the debug APK
         uses: actions/upload-artifact@v4
         with:
-          name: harmony-remote-debug-apk
+          name: hub-remote-debug-apk
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
 
