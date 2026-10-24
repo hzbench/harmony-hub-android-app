@@ -220,7 +220,10 @@ class MainActivity : AppCompatActivity() {
                 callback: ValueCallback<Array<Uri>>,
                 params: FileChooserParams
             ): Boolean {
-                fileCallback?.onReceiveValue(null)   // a new request replaces any unanswered one
+                if (fileCallback != null) {   // a picker is already open; its result is not this request's
+                    callback.onReceiveValue(null)
+                    return true
+                }
                 fileCallback = callback
                 // The page asks for .json, which many pickers can't match by type; let the person
                 // see every file, and the page checks what it was given.
@@ -229,8 +232,7 @@ class MainActivity : AppCompatActivity() {
                     fileChooser.launch(intent)
                 } catch (e: ActivityNotFoundException) {
                     fileCallback = null
-                    callback.onReceiveValue(null)
-                    return false
+                    callback.onReceiveValue(null)   // answered, so WebView must not handle it again
                 }
                 return true
             }

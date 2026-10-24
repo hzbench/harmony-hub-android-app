@@ -174,7 +174,7 @@ button press goes to the hub from a small receiver, so it works with the app clo
 The hub's page can ask for a file (Setup > Software update picks a `hub-release-*.json`).
 `MainActivity` answers with Android's system file picker, set to show every file because
 many pickers can't match `.json` by type; the page checks what it was given. Cancelling the
-picker, or opening a second one before the first is answered, leaves nothing hanging.
+picker leaves nothing hanging; a second request while one picker is open is answered "no file".
 
 ## Icon
 
