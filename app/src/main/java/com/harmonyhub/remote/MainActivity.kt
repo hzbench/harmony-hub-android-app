@@ -79,11 +79,19 @@ class MainActivity : AppCompatActivity() {
         configureWebView(webView)
 
         onBackPressedDispatcher.addCallback(this) {
-            if (webView.canGoBack()) {
-                webView.goBack()
-            } else {
-                isEnabled = false
-                onBackPressedDispatcher.onBackPressed()
+            // The page gets first say: its editor closes a sheet or asks before
+            // discarding unsaved changes. Only when it didn't handle Back do we
+            // navigate back (or leave the app).
+            webView.evaluateJavascript(
+                "window.harmonyHandleBack ? window.harmonyHandleBack() : false"
+            ) { handled ->
+                if (handled == "true") return@evaluateJavascript
+                if (webView.canGoBack()) {
+                    webView.goBack()
+                } else {
+                    isEnabled = false
+                    onBackPressedDispatcher.onBackPressed()
+                }
             }
         }
 
