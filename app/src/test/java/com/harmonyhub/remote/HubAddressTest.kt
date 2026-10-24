@@ -41,4 +41,18 @@ class HubAddressTest {
         assertEquals("192.168.1.50:8080", HubAddress.label("http://192.168.1.50:8080/"))
         assertEquals("", HubAddress.label(null))
     }
+
+    @Test fun titleIsTheHubNameWhenThereIsOne() =
+        assertEquals("Living Room", HubAddress.title("  Living Room ", "http://192.168.1.50:8080/"))
+
+    @Test fun titleFallsBackToTheAddress() {
+        assertEquals("192.168.1.50:8080", HubAddress.title(null, "http://192.168.1.50:8080/"))
+        assertEquals("192.168.1.50:8080", HubAddress.title("   ", "http://192.168.1.50:8080/"))
+        assertEquals("", HubAddress.title(null, null))
+    }
+
+    @Test fun titleDropsControlCharactersAndIsCapped() {
+        assertEquals("Den", HubAddress.title("D\ten\n", null))
+        assertEquals(HubAddress.NAME_MAX, HubAddress.title("x".repeat(100), null).length)
+    }
 }

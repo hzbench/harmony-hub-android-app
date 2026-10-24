@@ -29,4 +29,12 @@ object HubAddress {
     /** The address as shown to people: no scheme, no trailing slash. */
     fun label(hubUrl: String?): String =
         hubUrl?.removePrefix("http://")?.removeSuffix("/") ?: ""
+
+    /** Longest hub name the app shows (the hub enforces the same limit). */
+    const val NAME_MAX = 40
+
+    /** What the toolbar shows: the hub's own name, or its address while it has none. */
+    fun title(name: String?, hubUrl: String?): String =
+        name?.filter { !it.isISOControl() }?.trim()?.take(NAME_MAX)?.takeIf { it.isNotEmpty() }
+            ?: label(hubUrl)
 }
