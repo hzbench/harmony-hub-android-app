@@ -19,21 +19,82 @@ on:
         default: false
 
 permissions:
-  contents: write   # to create the release
-  actions: read     # to look up whether the Build workflow passed
+  contents: read
 
 concurrency:
-  group: release
+  group: release-${{ github.sha }}
   cancel-in-progress: false
 
 jobs:
-  release:
+  plan:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read   # to look up whether the Build workflow passed
     timeout-minutes: 30
+    outputs:
+      skip: ${{ steps.plan.outputs.skip }}
+      publish: ${{ steps.plan.outputs.publish }}
+      version: ${{ steps.plan.outputs.version }}
+      code: ${{ steps.plan.outputs.code }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0   # all tags, to check VERSION against earlier releases
+
+      - name: Work out what to release
+        id: plan
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PUBLISH: ${{ github.event_name == 'push' || inputs.publish }}
+        run: |
+          skip=false; publish=false; version="0.0.0-dev-${GITHUB_SHA::7}"; code=1
+          # Written once, whichever way this exits.
+          trap '{ echo "skip=$skip"; echo "publish=$publish"; echo "version=$version"; echo "code=$code"; } >> "$GITHUB_OUTPUT"' EXIT
+          # A hand-run build is signed with the real key, so only main may be built this way.
+          [[ "$GITHUB_REF" == "refs/heads/main" ]] || { echo "::error::Run this workflow from main."; exit 1; }
+          [[ "$PUBLISH" == "true" ]] || exit 0
+          version=$(tr -d ' \t\r\n' < VERSION)
+          [[ "$version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]?)\.(0|[1-9][0-9]?)$ ]] || { echo "::error::VERSION must look like 1.2.3 without leading zeros, minor and patch 0-99 (it is '$version')"; exit 1; }
+          code=$(( ${BASH_REMATCH[1]} * 10000 + ${BASH_REMATCH[2]} * 100 + ${BASH_REMATCH[3]} ))
+          # Released means a published GitHub Release exists; a tag left by a failed run does not count.
+          if [[ "$(gh release view "v$version" --json isDraft --jq .isDraft 2>/dev/null)" == "false" ]]; then
+            echo "::notice::v$version is already released; nothing to do. Change VERSION to release again."
+            skip=true; exit 0
+          fi
+          git fetch --quiet --tags origin
+          newest=$(git tag --list | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sed 's/^v//' | sort -V | tail -1 || true)
+          if [[ -n "$newest" && "$(printf '%s\n%s\n' "$newest" "$version" | sort -V | tail -1)" != "$version" ]]; then
+            echo "::error::VERSION $version is lower than the newest release $newest; versions only go up."; exit 1
+          fi
+          # Only tested code is signed with the real key. Build runs on the same push, so it may not
+          # be listed yet, or may still be going: wait for it (a few minutes to appear, 15 to finish).
+          for attempt in $(seq 1 30); do
+            passed=$(gh run list --workflow Build --commit "$GITHUB_SHA" --status success --json databaseId --jq length)
+            [[ "$passed" -gt 0 ]] && break
+            listed=$(gh run list --workflow Build --commit "$GITHUB_SHA" --json databaseId --jq length)
+            running=$(gh run list --workflow Build --commit "$GITHUB_SHA" --json status --jq '[.[] | select(.status != "completed")] | length')
+            if [[ "$listed" -gt 0 && "$running" -eq 0 ]]; then
+              echo "::error::The Build workflow ran on this commit and did not pass."; exit 1
+            fi
+            [[ "$listed" -gt 0 || "$attempt" -le 6 ]] || { echo "::error::No Build run was found for this commit."; exit 1; }
+            echo "Waiting for the Build workflow on this commit..."
+            sleep 30
+          done
+          [[ "$passed" -gt 0 ]] || { echo "::error::The Build workflow did not finish in time."; exit 1; }
+          publish=true
+          echo "Releasing $version"
+
+  release:
+    needs: plan
+    if: needs.plan.outputs.skip != 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # to create the release
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
 
       - uses: actions/setup-java@v4
         with:
@@ -42,60 +103,12 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
-      - name: Work out what to release
-        id: version
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-          PUBLISH: ${{ github.event_name == 'push' || inputs.publish }}
-        run: |
-          # A hand-run build is signed with the real key, so only main may be built this way.
-          [[ "$GITHUB_REF" == "refs/heads/main" ]] || { echo "::error::Run this workflow from main."; exit 1; }
-          if [[ "$PUBLISH" != "true" ]]; then
-            # A build to download: version code 1, so it can only be installed fresh, never over a real release.
-            echo "publish=false" >> "$GITHUB_OUTPUT"
-            echo "name=0.0.0-dev-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
-            echo "code=1" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          version=$(tr -d ' \t\r\n' < VERSION)
-          [[ "$version" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]] || { echo "::error::VERSION must look like 1.2.3 (it is '$version')"; exit 1; }
-          major=${BASH_REMATCH[1]}; minor=${BASH_REMATCH[2]}; patch=${BASH_REMATCH[3]}
-          (( minor <= 99 && patch <= 99 )) || { echo "::error::Minor and patch must be 99 or less"; exit 1; }
-          git fetch --quiet --tags origin
-          if git rev-parse -q --verify "refs/tags/v$version" > /dev/null; then
-            echo "::notice::v$version is already released; nothing to do. Change VERSION to release again."
-            echo "publish=false" >> "$GITHUB_OUTPUT"; echo "skip=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          newest=$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' | sed 's/^v//' | sort -V | tail -1)
-          if [[ -n "$newest" && "$(printf '%s\n%s\n' "$newest" "$version" | sort -V | tail -1)" != "$version" ]]; then
-            echo "::error::VERSION $version is lower than the newest release $newest; versions only go up."; exit 1
-          fi
-          # Only tested code is signed with the real key. Build runs on the same push, so it may
-          # still be going: wait for it (up to 15 minutes).
-          for attempt in $(seq 1 30); do
-            passed=$(gh run list --workflow Build --commit "$GITHUB_SHA" --status success --json databaseId --jq length)
-            [[ "$passed" -gt 0 ]] && break
-            running=$(gh run list --workflow Build --commit "$GITHUB_SHA" --json status --jq '[.[] | select(.status != "completed")] | length')
-            [[ "$running" -gt 0 ]] || { echo "::error::The Build workflow has not passed on this commit."; exit 1; }
-            echo "The Build workflow is still running on this commit; waiting..."
-            sleep 30
-          done
-          [[ "$passed" -gt 0 ]] || { echo "::error::The Build workflow did not finish in time."; exit 1; }
-          echo "publish=true" >> "$GITHUB_OUTPUT"
-          echo "name=$version" >> "$GITHUB_OUTPUT"
-          echo "code=$(( major * 10000 + minor * 100 + patch ))" >> "$GITHUB_OUTPUT"
-          echo "Releasing $version (version code $(( major * 10000 + minor * 100 + patch )))"
-
       - name: Unit tests
-        if: steps.version.outputs.skip != 'true'
         run: ./gradlew testDebugUnitTest --no-daemon
 
       # The signing key is only handed to the steps below, after the tests and third-party actions
       # have run; the repository's own build then reads it from a file that is deleted afterwards.
       - name: Restore the signing key
-        if: steps.version.outputs.skip != 'true'
         shell: bash
         env:
           KEYSTORE_BASE64: ${{ secrets.HUBREMOTE_KEYSTORE_BASE64 }}
@@ -116,8 +129,7 @@ jobs:
           echo "HUBREMOTE_SIGNING=$RUNNER_TEMP/signing.properties" >> "$GITHUB_ENV"
 
       - name: Build the signed APK
-        if: steps.version.outputs.skip != 'true'
-        run: ./gradlew assembleRelease --no-daemon -PversionName=${{ steps.version.outputs.name }} -PversionCode=${{ steps.version.outputs.code }}
+        run: ./gradlew assembleRelease --no-daemon -PversionName=${{ needs.plan.outputs.version }} -PversionCode=${{ needs.plan.outputs.code }}
 
       - name: Remove the signing key from the runner
         if: always()
@@ -126,12 +138,11 @@ jobs:
 
       - name: Check the APK
         id: apk
-        if: steps.version.outputs.skip != 'true'
         shell: bash
         env:
           EXPECTED_CERT_SHA256: ${{ vars.HUBREMOTE_CERT_SHA256 }}
-          WANT_VERSION_NAME: ${{ steps.version.outputs.name }}
-          WANT_VERSION_CODE: ${{ steps.version.outputs.code }}
+          WANT_VERSION_NAME: ${{ needs.plan.outputs.version }}
+          WANT_VERSION_CODE: ${{ needs.plan.outputs.code }}
         run: |
           [[ -n "$EXPECTED_CERT_SHA256" ]] || { echo "::error::The variable HUBREMOTE_CERT_SHA256 is not set (see the README, Release APK)"; exit 1; }
           # The newest build-tools that actually has both tools (a preview directory may not).
@@ -164,16 +175,19 @@ jobs:
           echo "file=$out" >> "$GITHUB_OUTPUT"
 
       - name: Publish the release
-        if: steps.version.outputs.publish == 'true'
+        if: needs.plan.outputs.publish == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
-          gh release create "v${{ steps.version.outputs.name }}" "${{ steps.apk.outputs.file }}" "${{ steps.apk.outputs.file }}.sha256" \
-            --title "Hub Remote ${{ steps.version.outputs.name }}" --generate-notes --target "$GITHUB_SHA"
+          tag="v${{ needs.plan.outputs.version }}"
+          # A failed earlier attempt can leave an unpublished draft behind; replace it.
+          if [[ "$(gh release view "$tag" --json isDraft --jq .isDraft 2>/dev/null)" == "true" ]]; then gh release delete "$tag" --yes; fi
+          gh release create "$tag" "${{ steps.apk.outputs.file }}" "${{ steps.apk.outputs.file }}.sha256" \
+            --title "Hub Remote ${{ needs.plan.outputs.version }}" --generate-notes --target "$GITHUB_SHA"
 
       - name: Keep the APK as a download (hand-run builds)
-        if: steps.version.outputs.publish != 'true' && steps.version.outputs.skip != 'true'
+        if: needs.plan.outputs.publish != 'true'
         uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.apk.outputs.file }}
