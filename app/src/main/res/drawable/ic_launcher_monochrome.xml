@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Themed-icon version of the foreground: the remote body with its buttons cut out. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <path
+        android:fillColor="#FFFFFF"
+        android:fillType="evenOdd"
+        android:pathData="M38,26 h32 v64 h-32 z M48,34 m0,5 a5,5 0 1 0 10,0 a5,5 0 1 0 -10,0 M48,54 m0,5 a5,5 0 1 0 10,0 a5,5 0 1 0 -10,0 M49,74 m0,4 a4,4 0 1 0 8,0 a4,4 0 1 0 -8,0" />
+</vector>
