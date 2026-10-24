@@ -176,14 +176,13 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun hubLabel(): String =
-        prefs.getString(KEY_HUB_URL, null)?.removePrefix("http://")?.removeSuffix("/") ?: ""
+    private fun hubLabel(): String = HubAddress.label(prefs.getString(KEY_HUB_URL, null))
 
     private fun load(url: String) {
         loadFailed = false
         failedUrl = null
         showLoading()
-        webView.loadUrl(entryUrl(url))
+        webView.loadUrl(HubAddress.entryUrl(url))
     }
 
     private fun showLoading() {
@@ -234,26 +233,12 @@ class MainActivity : AppCompatActivity() {
                     promptForHubAddress(existing)
                     return@setPositiveButton
                 }
-                val url = normalizeHubUrl(typed)
+                val url = HubAddress.normalize(typed)
                 prefs.edit().putString(KEY_HUB_URL, url).apply()
                 load(url)
             }
             .show()
     }
-
-    private fun normalizeHubUrl(typed: String): String {
-        var url = typed
-        if (!url.startsWith("http://") && !url.startsWith("https://")) {
-            url = "http://$url"
-        }
-        if (!url.endsWith("/")) url = "$url/"
-        // The saved address is the hub itself; the app adds the UI path.
-        return if (url.endsWith("/$ENTRY_PATH")) url.removeSuffix(ENTRY_PATH) else url
-    }
-
-    /** The daily-use remote UI the hub serves under /go/ (the original UI stays at the root). */
-    private fun entryUrl(hubUrl: String): String =
-        if (hubUrl.endsWith("/$ENTRY_PATH")) hubUrl else hubUrl.trimEnd('/') + "/$ENTRY_PATH"
 
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
         menu.add(Menu.NONE, MENU_CHANGE_HUB, Menu.NONE, R.string.action_change_hub)
@@ -297,6 +282,5 @@ class MainActivity : AppCompatActivity() {
         private const val PREFS_NAME = "harmony_remote"
         private const val KEY_HUB_URL = "hub_url"
         private const val MENU_CHANGE_HUB = 1
-        private const val ENTRY_PATH = "go/"
     }
 }

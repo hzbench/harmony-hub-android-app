@@ -33,6 +33,18 @@ run it on a device over USB. For a release APK use Build > Generate
 Signed Bundle / APK and sideload it — this app isn't going through the
 Play Store.
 
+## Tests and CI
+
+```
+./gradlew testDebugUnitTest   # JVM unit tests (hub address handling)
+./gradlew lintDebug           # Android lint; errors fail, warnings don't
+```
+
+GitHub Actions (`.github/workflows/build.yml`) runs the unit tests, builds
+the debug APK and runs lint on every pull request and push to `main`, and
+keeps the APK and lint report as artifacts. It can't run the app: volume
+keys, the error and loading screens and the dialogs still need a phone.
+
 ## First run
 
 On first launch it asks for the hub's address (`<ip>:8080` or a full
