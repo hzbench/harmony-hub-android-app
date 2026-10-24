@@ -13,4 +13,5 @@
     <string name="lock_screen_text">Tap to open the remote</string>
     <string name="lock_screen_nothing_running">Nothing is running.</string>
     <string name="lock_screen_no_hub">No hub address is set.</string>
+    <string name="lock_screen_slow">The hub is slow to answer. Try again.</string>
 </resources>

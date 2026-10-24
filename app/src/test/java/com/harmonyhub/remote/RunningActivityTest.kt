@@ -39,6 +39,23 @@ class RunningActivityTest {
         assertNull(RunningActivity.parse("""{"id":"a","name":"A","buttons":[]}"""))
     }
 
+    @Test fun aJsonNullIsMissingNotTheTextNull() {
+        // Android reads a JSON null back as the text "null"; it must not become a device id.
+        val nulls = """{"id":"a","name":"A","buttons":[{"label":"Play","deviceId":null,"command":"Play","transport":"ir"},{"label":"Play","deviceId":"1","command":null,"transport":"ir"}]}"""
+        assertNull(RunningActivity.parse(nulls))
+        assertNull(RunningActivity.parse("""{"id":null,"name":"A","buttons":[${button("play", "Play")}]}"""))
+        assertEquals("a", RunningActivity.parse("""{"id":"a","name":null,"buttons":[${button("play", "Play")}]}""")!!.name)
+    }
+
+    @Test fun tooLongValuesAreRejectedNotShortened() {
+        val long = "x".repeat(200)
+        val tooLongCommand = """{"label":"Play","deviceId":"1","command":"$long","transport":"ir"}"""
+        assertNull(RunningActivity.parse("""{"id":"a","name":"A","buttons":[$tooLongCommand]}"""))
+        val mixed = RunningActivity.parse("""{"id":"a","name":"A","buttons":[$tooLongCommand,${button("play", "Play")}]}""")!!
+        assertEquals(listOf("play"), mixed.buttons.map { it.key })
+        assertNull(RunningActivity.parse("""{"id":"$long","name":"A","buttons":[${button("play", "Play")}]}"""))
+    }
+
     @Test fun atMostThreeButtons() {
         val many = (1..6).joinToString(",") { button("k$it", "B$it") }
         assertEquals(3, RunningActivity.parse("""{"id":"a","name":"A","buttons":[$many]}""")!!.buttons.size)

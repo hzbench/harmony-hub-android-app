@@ -82,6 +82,24 @@ calls `window.harmonyHardwareVolume('up' | 'down')` in the page via
 — background/locked-screen capture was deliberately not pursued (would
 need a foreground service and/or an Accessibility Service permission).
 
+## Lock-screen buttons
+
+While an activity is on, the app keeps a notification with **Volume down**, **Play** and
+**Volume up** buttons, public on the lock screen. The hub's page works out which command
+each button sends (the same choice the hardware volume keys make) and tells the app; a
+button press goes to the hub from a small receiver, so it works with the app closed.
+
+- Android 13+ asks for permission to show notifications the first time something is on.
+- Some phones show only icons on the lock screen until you tap them (a system setting);
+  one tap then shows the buttons.
+- **The buttons work while the phone is locked.** That is the point, but it also means
+  anyone holding the locked phone can press them. Stop the activity (or turn off the app's
+  notifications) to remove them.
+- The notification goes away when the activity is stopped from the app. If it is stopped
+  from another phone, it stays until the app is next opened. Swiping it away hides it
+  until the app next opens with an activity running.
+- It is removed when the hub address is changed.
+
 ## Icon
 
 `res/drawable/ic_launcher_*.xml` is a placeholder vector glyph (plain

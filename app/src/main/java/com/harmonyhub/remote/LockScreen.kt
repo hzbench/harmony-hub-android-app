@@ -28,6 +28,7 @@ object LockScreen {
     const val EXTRA_INDEX = "index"
     /** The running activity, kept so a button still works after the app's process has gone. */
     const val KEY_RUNNING = "running_activity"
+    private const val KEY_CHANNEL_MIGRATED = "lock_channel_migrated"
 
     fun canNotify(context: Context): Boolean =
         Build.VERSION.SDK_INT < 33 ||
@@ -36,13 +37,20 @@ object LockScreen {
     /** Shows the buttons for [running], or removes them when nothing is. */
     fun update(context: Context, running: RunningActivity?) {
         val prefs = context.getSharedPreferences(MainActivity.PREFS_NAME, Context.MODE_PRIVATE)
-        prefs.edit().apply { if (running == null) remove(KEY_RUNNING) else putString(KEY_RUNNING, running.toJson()) }.apply()
         val manager = context.getSystemService(NotificationManager::class.java)
+        val json = running?.toJson()
+        // The page may announce the same thing again; nothing to redo while it is already showing.
+        if (json != null && json == prefs.getString(KEY_RUNNING, null) &&
+            manager.activeNotifications.any { it.id == NOTIFICATION_ID }) return
+        prefs.edit().apply { if (json == null) remove(KEY_RUNNING) else putString(KEY_RUNNING, json) }.apply()
         if (running == null || !canNotify(context)) {
             manager.cancel(NOTIFICATION_ID)
             return
         }
-        manager.deleteNotificationChannel(OLD_CHANNEL_ID)
+        if (!prefs.getBoolean(KEY_CHANNEL_MIGRATED, false)) {
+            manager.deleteNotificationChannel(OLD_CHANNEL_ID)
+            prefs.edit().putBoolean(KEY_CHANNEL_MIGRATED, true).apply()
+        }
         manager.createNotificationChannel(
             NotificationChannel(CHANNEL_ID, context.getString(R.string.lock_screen_channel), NotificationManager.IMPORTANCE_DEFAULT).apply {
                 lockscreenVisibility = Notification.VISIBILITY_PUBLIC

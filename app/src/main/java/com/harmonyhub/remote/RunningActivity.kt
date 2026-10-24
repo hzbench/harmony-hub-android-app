@@ -23,16 +23,18 @@ data class RunningActivity(val id: String, val name: String, val buttons: List<L
             if (json.isNullOrBlank()) return null
             return try {
                 val root = JSONObject(json)
-                val id = clean(root.optString("id"), 96)
-                val name = clean(root.optString("name"), MAX_NAME)
+                val id = strict(root, "id", 96)
+                val name = clean(field(root, "name"), MAX_NAME)
                 if (id.isEmpty()) return null
                 val array = root.optJSONArray("buttons") ?: return null
                 val buttons = (0 until minOf(array.length(), MAX_BUTTONS)).mapNotNull { i ->
                     val b = array.optJSONObject(i) ?: return@mapNotNull null
+                    // A value that is too long is rejected, not cut short: a shortened command
+                    // or device id could match a different saved one.
                     val button = LockButton(
-                        key = clean(b.optString("key"), 24), label = clean(b.optString("label"), 40),
-                        deviceId = clean(b.optString("deviceId"), 64), command = clean(b.optString("command"), 127),
-                        transport = clean(b.optString("transport"), 16),
+                        key = strict(b, "key", 24), label = strict(b, "label", 40),
+                        deviceId = strict(b, "deviceId", 64), command = strict(b, "command", 127),
+                        transport = strict(b, "transport", 16),
                     )
                     button.takeIf { it.label.isNotEmpty() && it.deviceId.isNotEmpty() && it.command.isNotEmpty() && it.transport.isNotEmpty() }
                 }
@@ -42,6 +44,12 @@ data class RunningActivity(val id: String, val name: String, val buttons: List<L
             }
         }
 
+        // On Android a JSON null reads back as the text "null"; treat it as missing.
+        private fun field(o: JSONObject, key: String) = if (o.isNull(key)) "" else o.optString(key)
         private fun clean(text: String, max: Int) = text.filter { !it.isISOControl() }.trim().take(max)
+        private fun strict(o: JSONObject, key: String, max: Int): String {
+            val cleaned = field(o, key).filter { !it.isISOControl() }.trim()
+            return if (cleaned.length > max) "" else cleaned
+        }
     }
 }

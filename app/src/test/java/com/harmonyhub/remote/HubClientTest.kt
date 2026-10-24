@@ -45,11 +45,13 @@ class HubClientTest {
     private var sessionStatus = 200
     private var sessionBody = """{"ok":true,"role":"owner","csrf":"token-123"}"""
     private var sendStatus = 202
+    private var sessionDelayMs = 0L
     private val button = LockButton("volumeup", "Volume up", "1", "VolumeUp", "ir")
 
     @Before fun start() {
         server = TinyServer { method, path, headers, body ->
             seen.add(Triple(method, path, headers))
+            if (sessionDelayMs > 0) Thread.sleep(sessionDelayMs)
             bodies.add(body)
             if (path == "/api/v1/session") sessionStatus to sessionBody else sendStatus to """{"id":"op1"}"""
         }
@@ -82,7 +84,7 @@ class HubClientTest {
         assertEquals(1, seen.size)
         sessionStatus = 200; sessionBody = """{"role":"pending","csrf":"x"}"""
         seen.clear()
-        assertTrue((HubClient(url(), "harmony=x").press(button) as HubClient.Result.Failed).message.contains("paired"))
+        assertTrue("a phone waiting for approval is told so", (HubClient(url(), "harmony=x").press(button) as HubClient.Result.Failed).message.contains("approve"))
         assertEquals(1, seen.size)
     }
 
@@ -91,6 +93,22 @@ class HubClientTest {
         assertEquals("The hub refused the request.", (HubClient(url(), "harmony=a").press(button) as HubClient.Result.Failed).message)
         sendStatus = 500
         assertTrue((HubClient(url(), "harmony=a").press(button) as HubClient.Result.Failed).message.contains("500"))
+    }
+
+    @Test fun aBusyHubIsToldPlainly() {
+        for (status in listOf(409, 429)) {
+            sendStatus = status
+            assertEquals("The hub is busy. Try again in a moment.", (HubClient(url(), "harmony=a").press(button) as HubClient.Result.Failed).message)
+        }
+    }
+
+    @Test fun aSlowHubFailsWithinTheBudgetInsteadOfHanging() {
+        sessionDelayMs = 2000
+        val started = System.nanoTime()
+        val result = HubClient(url(), "harmony=a", budgetMs = 400).press(button)
+        val tookMs = (System.nanoTime() - started) / 1_000_000
+        assertEquals("Couldn't reach the hub.", (result as HubClient.Result.Failed).message)
+        assertTrue("gave up after $tookMs ms", tookMs < 1500)
     }
 
     @Test fun anUnreachableHubIsAFailureNotACrash() {

@@ -221,6 +221,9 @@ class MainActivity : AppCompatActivity() {
         fun setRunningActivity(json: String) {
             runOnUiThread {
                 val running = RunningActivity.parse(json)
+                // A cookie set by a request (pairing, say) isn't on disk until flushed, and a
+                // button pressed after this process has gone needs it there.
+                CookieManager.getInstance().flush()
                 LockScreen.update(this@MainActivity, running)
                 if (running != null) askToShowNotifications()
             }
@@ -297,6 +300,8 @@ class MainActivity : AppCompatActivity() {
                 val editor = prefs.edit().putString(KEY_HUB_URL, url)
                 if (url != existing) editor.remove(KEY_HUB_NAME)
                 editor.apply()
+                // The old hub's running activity, devices and commands mean nothing on another hub.
+                if (url != existing) LockScreen.update(this, null)
                 showHubTitle()
                 load(url)
             }
