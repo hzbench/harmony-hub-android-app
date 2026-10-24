@@ -21,10 +21,11 @@ android {
         // Android 8.0+. Lower this if your phone is older than that.
         minSdk = 26
         targetSdk = 34
-        // Raise versionCode with every build you give to anyone: Android only installs an update
-        // over an existing copy when it is higher.
-        versionCode = 1
-        versionName = "0.1.0"
+        // Android only installs an update over an existing copy when versionCode is higher, so it
+        // must rise with every build handed out. The GitHub release workflow passes both from the
+        // version tag (-PversionName=1.2.3 -PversionCode=10203); these are the local defaults.
+        versionCode = (project.findProperty("versionCode") as String?)?.toInt() ?: 1
+        versionName = project.findProperty("versionName") as String? ?: "0.1.0"
     }
 
     signingConfigs {

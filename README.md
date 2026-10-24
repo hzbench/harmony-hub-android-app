@@ -58,6 +58,33 @@ once friends have it. Debug builds use `...hubremote.debug` and are called "Hub 
 5. **Install.** Send the APK to a friend; on their phone they allow "Install unknown
    apps" for whatever app they opened it from. It needs Android 8 or newer.
 
+### Releases on GitHub
+
+`.github/workflows/release.yml` builds and publishes the signed APK for you.
+
+- **Publish:** push a tag like `v0.2.0` (`git tag v0.2.0 && git push origin v0.2.0`). The
+  workflow runs the unit tests, builds, checks the APK, and creates a GitHub Release
+  named "Hub Remote 0.2.0" with `hub-remote-0.2.0.apk` and its `.sha256` attached and
+  release notes generated from the merged pull requests. The version comes from the tag:
+  `versionName` is `0.2.0` and `versionCode` is major×10000 + minor×100 + patch (`20000`
+  would be 2.0.0), so it always rises as long as the tag does. Minor and patch must be
+  99 or less.
+- **Try the pipeline without publishing:** Actions > Release > Run workflow builds a signed
+  APK (version code 1, so it can only be installed fresh) and keeps it as a download for a
+  week.
+- **Where the key is:** in the repository's Actions secrets `HUBREMOTE_KEYSTORE_BASE64`,
+  `HUBREMOTE_STORE_PASSWORD`, `HUBREMOTE_KEY_ALIAS` and `HUBREMOTE_KEY_PASSWORD`, plus the
+  variable `HUBREMOTE_CERT_SHA256` (the certificate's fingerprint). The workflow writes the
+  key to the runner's temporary folder, builds, and deletes it. **A secret can't be read
+  back out of GitHub, so keep the copy in `~/.hub-remote-signing/` backed up.** If the key
+  ever changes, update all four secrets and the variable together; the build refuses to
+  produce an APK signed with a key whose fingerprint doesn't match.
+- Only people with write access to this repository can run the workflow or read the
+  secrets, and the secrets are not available to pull-request builds from forks. Anyone who
+  can change workflows in this repository could use the key, so keep it private.
+- **Downloading:** the release page of this (private) repository. Friends need access to the
+  repository to see it.
+
 This is a sideloaded build, not a Play Store one: the Play Store would need the app
 bundle (`bundleRelease`), a developer account and a newer target SDK (API 36).
 
