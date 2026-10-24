@@ -11,5 +11,5 @@ dependencyResolutionManagement {
         mavenCentral()
     }
 }
-rootProject.name = "HarmonyRemote"
+rootProject.name = "HubRemote"
 include(":app")

@@ -1,0 +1,4 @@
+<resources>
+    <!-- So the debug build is told apart from the release build in the launcher. -->
+    <string name="app_name">Hub Remote (debug)</string>
+</resources>
