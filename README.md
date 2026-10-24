@@ -169,6 +169,13 @@ button press goes to the hub from a small receiver, so it works with the app clo
   until the app next opens with an activity running.
 - It is removed when the hub address is changed.
 
+## File picker
+
+The hub's page can ask for a file (Setup > Software update picks a `hub-release-*.json`).
+`MainActivity` answers with Android's system file picker, set to show every file because
+many pickers can't match `.json` by type; the page checks what it was given. Cancelling the
+picker, or opening a second one before the first is answered, leaves nothing hanging.
+
 ## Icon
 
 `res/drawable/ic_launcher_*.xml` is a placeholder vector glyph (plain

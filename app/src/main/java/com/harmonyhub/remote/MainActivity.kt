@@ -2,6 +2,8 @@ package com.harmonyhub.remote
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.app.Activity
+import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.SharedPreferences
 import android.graphics.Bitmap
@@ -16,6 +18,7 @@ import android.view.WindowManager
 import android.webkit.CookieManager
 import android.webkit.JavascriptInterface
 import android.webkit.JsResult
+import android.webkit.ValueCallback
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
@@ -26,6 +29,7 @@ import android.widget.Button
 import android.widget.EditText
 import android.widget.TextView
 import androidx.activity.addCallback
+import android.net.Uri
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
@@ -64,6 +68,18 @@ class MainActivity : AppCompatActivity() {
     private val notificationPermission =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
             if (granted) LockScreen.update(this, RunningActivity.parse(prefs.getString(LockScreen.KEY_RUNNING, null)))
+        }
+
+    // The page's file input (Setup > Software update) asks for a file; WebView does nothing
+    // unless the app answers. At most one request is open; its callback must be answered once.
+    private var fileCallback: ValueCallback<Array<Uri>>? = null
+    private val fileChooser =
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+            val uris = if (result.resultCode == Activity.RESULT_OK) {
+                WebChromeClient.FileChooserParams.parseResult(result.resultCode, result.data)
+            } else null
+            fileCallback?.onReceiveValue(uris)
+            fileCallback = null
         }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -196,6 +212,26 @@ class MainActivity : AppCompatActivity() {
                     .setPositiveButton(android.R.string.ok) { _, _ -> result.confirm() }
                     .setNegativeButton(android.R.string.cancel) { _, _ -> result.cancel() }
                     .show()
+                return true
+            }
+
+            override fun onShowFileChooser(
+                view: WebView,
+                callback: ValueCallback<Array<Uri>>,
+                params: FileChooserParams
+            ): Boolean {
+                fileCallback?.onReceiveValue(null)   // a new request replaces any unanswered one
+                fileCallback = callback
+                // The page asks for .json, which many pickers can't match by type; let the person
+                // see every file, and the page checks what it was given.
+                val intent = params.createIntent().setType("*/*")
+                try {
+                    fileChooser.launch(intent)
+                } catch (e: ActivityNotFoundException) {
+                    fileCallback = null
+                    callback.onReceiveValue(null)
+                    return false
+                }
                 return true
             }
         }
