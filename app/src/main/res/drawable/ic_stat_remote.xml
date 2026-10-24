@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The app's remote, as the one-colour status-bar icon. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">
+    <path android:fillColor="#FFFFFFFF" android:fillType="evenOdd"
+        android:pathData="M8.5,2h7a2,2 0,0 1,2 2v16a2,2 0,0 1,-2 2h-7a2,2 0,0 1,-2 -2V4a2,2 0,0 1,2 -2z M12,5.2a1.1,1.1 0,1 0,0.001 0z M12,8.4a2.4,2.4 0,1 0,0.001 0z M9.5,14.6h5v1.4h-5z M9.5,17.2h5v1.4h-5z" />
+</vector>

@@ -1,9 +1,11 @@
 package com.harmonyhub.remote
 
+import android.Manifest
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.SharedPreferences
 import android.graphics.Bitmap
+import android.os.Build
 import android.os.Bundle
 import android.text.InputType
 import android.view.KeyEvent
@@ -24,6 +26,7 @@ import android.widget.Button
 import android.widget.EditText
 import android.widget.TextView
 import androidx.activity.addCallback
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.Toolbar
@@ -56,6 +59,12 @@ class MainActivity : AppCompatActivity() {
     // or when we start a load ourselves.
     private var loadFailed = false
     private var failedUrl: String? = null
+
+    // Android 13+ asks before an app may show notifications; the lock-screen buttons are one.
+    private val notificationPermission =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            if (granted) LockScreen.update(this, RunningActivity.parse(prefs.getString(LockScreen.KEY_RUNNING, null)))
+        }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -149,6 +158,9 @@ class MainActivity : AppCompatActivity() {
 
             override fun onPageFinished(view: WebView, url: String) {
                 if (!loadFailed) hideError()
+                // Save the pairing cookie to disk so a lock-screen button can use it
+                // even after this app's process has been stopped.
+                CookieManager.getInstance().flush()
             }
         }
 
@@ -195,8 +207,25 @@ class MainActivity : AppCompatActivity() {
             HubAddress.title(prefs.getString(KEY_HUB_NAME, null), prefs.getString(KEY_HUB_URL, null))
     }
 
+    /** Asks once, the first time there is something to show; a "no" is not asked again. */
+    private fun askToShowNotifications() {
+        if (Build.VERSION.SDK_INT < 33 || LockScreen.canNotify(this) || prefs.getBoolean(KEY_ASKED_NOTIFICATIONS, false)) return
+        prefs.edit().putBoolean(KEY_ASKED_NOTIFICATIONS, true).apply()
+        notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+    }
+
     /** Called by the hub's own page (a bridge thread, not the UI thread). */
     private inner class HubBridge {
+        /** The activity that is on and its lock-screen buttons, as JSON; empty when none is. */
+        @JavascriptInterface
+        fun setRunningActivity(json: String) {
+            runOnUiThread {
+                val running = RunningActivity.parse(json)
+                LockScreen.update(this@MainActivity, running)
+                if (running != null) askToShowNotifications()
+            }
+        }
+
         @JavascriptInterface
         fun setHubName(name: String) {
             runOnUiThread {
@@ -313,8 +342,9 @@ class MainActivity : AppCompatActivity() {
     }
 
     companion object {
-        private const val PREFS_NAME = "harmony_remote"
-        private const val KEY_HUB_URL = "hub_url"
+        const val PREFS_NAME = "harmony_remote"
+        const val KEY_HUB_URL = "hub_url"
+        private const val KEY_ASKED_NOTIFICATIONS = "asked_notifications"
         private const val KEY_HUB_NAME = "hub_name"
         private const val MENU_CHANGE_HUB = 1
     }
