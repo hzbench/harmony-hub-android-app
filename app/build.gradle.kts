@@ -84,5 +84,5 @@ dependencies {
 
     testImplementation("junit:junit:4.13.2")
     // Android bundles org.json; plain JVM unit tests need the real thing.
-    testImplementation("org.json:json:20240303")
+    testImplementation("org.json:json:20260814")
 }
