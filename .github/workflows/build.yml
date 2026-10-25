@@ -23,7 +23,7 @@ jobs:
 
       # The runner image ships the Android SDK; this also accepts its licenses and
       # caches Gradle's downloads between runs.
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v6
 
       - name: VERSION is a release version
         run: |
