@@ -9,7 +9,7 @@ control".
 **Status: builds and runs.** It has been built with Gradle and run on a
 real phone (Pixel 6 Pro) against the hub's web UI, including the
 volume-key hook, the `confirm()`/`alert()` dialogs, keep-screen-on and the
-"Change hub address" menu.
+"Change hub address" action.
 
 ## Prerequisites
 
@@ -130,7 +130,7 @@ keys, the error and loading screens and the dialogs still need a phone.
 On first launch it asks for the hub's address (`<ip>:8080` or a full
 `http://...` URL), stores it in `SharedPreferences`, and loads the hub's
 `/go/` UI (a stored address that already ends in `/go/` works too). Change it later
-via the overflow menu → "Change hub address". There's no discovery
+in the app under Setup → Hub address (or with "Change hub address" on the error screen). The toolbar shows the hub's name and a connection icon; it is hidden on remotes, where the page's own header carries the icon. There's no discovery
 mechanism by design — set a DHCP reservation for the hub's MAC in your
 router so the address stays stable (see `PLAN.md`).
 
