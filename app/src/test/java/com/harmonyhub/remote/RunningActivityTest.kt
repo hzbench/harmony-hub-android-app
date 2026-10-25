@@ -56,9 +56,9 @@ class RunningActivityTest {
         assertNull(RunningActivity.parse("""{"id":"$long","name":"A","buttons":[${button("play", "Play")}]}"""))
     }
 
-    @Test fun atMostThreeButtons() {
+    @Test fun atMostFourButtons() {
         val many = (1..6).joinToString(",") { button("k$it", "B$it") }
-        assertEquals(3, RunningActivity.parse("""{"id":"a","name":"A","buttons":[$many]}""")!!.buttons.size)
+        assertEquals(4, RunningActivity.parse("""{"id":"a","name":"A","buttons":[$many]}""")!!.buttons.size)
     }
 
     @Test fun nameIsCleanedCappedAndFallsBackToTheId() {

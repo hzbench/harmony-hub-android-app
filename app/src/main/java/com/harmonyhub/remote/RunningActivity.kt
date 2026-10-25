@@ -16,7 +16,7 @@ data class RunningActivity(val id: String, val name: String, val buttons: List<L
 
     companion object {
         const val MAX_NAME = 60
-        private const val MAX_BUTTONS = 3
+        private const val MAX_BUTTONS = 4
 
         /** The page sends an empty string when nothing is running. Anything unusable is "nothing". */
         fun parse(json: String?): RunningActivity? {

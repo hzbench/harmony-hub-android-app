@@ -1,8 +1,12 @@
 <resources>
     <string name="app_name">Hub Remote</string>
     <string name="prompt_hub_address">Hub address (e.g. 192.168.1.50:8080)</string>
+    <string name="connection_online">Connected to the hub</string>
+    <string name="connection_connecting">Connecting to the hub</string>
+    <string name="connection_offline">Can’t reach the hub. Tap to check again.</string>
     <string name="action_change_hub">Change hub address</string>
     <string name="button_save">Save</string>
+    <string name="button_cancel">Cancel</string>
     <string name="error_heading">Can’t reach the hub</string>
     <string name="error_unreachable">Couldn’t connect to %1$s. Check that the hub is on and that this phone is on the same network.</string>
     <string name="error_no_ui">The hub at %1$s answered, but it doesn’t have the new remote screens (error %2$d). Update the hub’s software, then try again.</string>
