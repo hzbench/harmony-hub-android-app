@@ -11,6 +11,7 @@ import android.os.Build
 import android.os.Bundle
 import android.text.InputType
 import android.view.KeyEvent
+import android.content.res.ColorStateList
 import android.view.Menu
 import android.view.MenuItem
 import android.view.View
@@ -267,6 +268,24 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        /** The Setup screen's "Hub address" row. */
+        @JavascriptInterface
+        fun changeHubAddress() {
+            runOnUiThread { promptForHubAddress(prefs.getString(KEY_HUB_URL, null)) }
+        }
+
+        /** Remotes hide the toolbar (the page's own header takes over); everything else shows it. */
+        @JavascriptInterface
+        fun setToolbarVisible(visible: Boolean) {
+            runOnUiThread { if (visible) supportActionBar?.show() else supportActionBar?.hide() }
+        }
+
+        /** "connecting", "online" or "offline": the icon on the right of the toolbar. */
+        @JavascriptInterface
+        fun setConnection(state: String) {
+            runOnUiThread { showConnection(state) }
+        }
+
         @JavascriptInterface
         fun setHubName(name: String) {
             runOnUiThread {
@@ -281,6 +300,7 @@ class MainActivity : AppCompatActivity() {
     private fun load(url: String) {
         loadFailed = false
         failedUrl = null
+        supportActionBar?.show()   // the page hides it on remotes; a fresh load starts on a list
         showLoading()
         webView.loadUrl(HubAddress.entryUrl(url))
     }
@@ -322,11 +342,13 @@ class MainActivity : AppCompatActivity() {
             hint = getString(R.string.prompt_hub_address)
             setText(existing?.removePrefix("http://")?.removeSuffix("/") ?: "")
         }
-        AlertDialog.Builder(this)
+        // With no address saved there is nothing to go back to, so Cancel only appears when changing one.
+        val canCancel = !existing.isNullOrBlank()
+        val dialog = AlertDialog.Builder(this)
             .setTitle(R.string.app_name)
             .setMessage(R.string.prompt_hub_address)
             .setView(input)
-            .setCancelable(false)
+            .setCancelable(canCancel)
             .setPositiveButton(R.string.button_save) { _, _ ->
                 val typed = input.text.toString().trim()
                 if (typed.isEmpty()) {
@@ -343,20 +365,46 @@ class MainActivity : AppCompatActivity() {
                 showHubTitle()
                 load(url)
             }
-            .show()
+        if (canCancel) dialog.setNegativeButton(R.string.button_cancel, null)
+        dialog.show()
     }
 
+    // The connection icon. Hidden until the page first reports a state, so a hub running an
+    // older page (which never does) doesn't show a permanent "connecting".
+    private var connectionItem: MenuItem? = null
+    private var connectionState: String? = null
+
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
-        menu.add(Menu.NONE, MENU_CHANGE_HUB, Menu.NONE, R.string.action_change_hub)
+        connectionItem = menu.add(Menu.NONE, MENU_CONNECTION, Menu.NONE, R.string.connection_connecting).apply {
+            setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
+            isVisible = false
+        }
+        connectionState?.let { showConnection(it) }
         return true
     }
 
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
-        if (item.itemId == MENU_CHANGE_HUB) {
-            promptForHubAddress(prefs.getString(KEY_HUB_URL, null))
+        if (item.itemId == MENU_CONNECTION) {
+            // Same as tapping the page's own icon.
+            webView.evaluateJavascript("window.harmonyCheckConnection && window.harmonyCheckConnection()", null)
             return true
         }
         return super.onOptionsItemSelected(item)
+    }
+
+    private fun showConnection(state: String) {
+        connectionState = state
+        val item = connectionItem ?: return
+        val (icon, color, label) = when (state) {
+            "online" -> Triple(R.drawable.ic_conn_online, 0xFF4CC38A.toInt(), R.string.connection_online)
+            "offline" -> Triple(R.drawable.ic_conn_offline, 0xFFFF6B6B.toInt(), R.string.connection_offline)
+            else -> Triple(R.drawable.ic_conn_connecting, 0xFFFFB84D.toInt(), R.string.connection_connecting)
+        }
+        item.setIcon(icon)
+        item.iconTintList = ColorStateList.valueOf(color)
+        item.title = getString(label)
+        item.contentDescription = getString(label)
+        item.isVisible = true
     }
 
     /**
@@ -389,6 +437,6 @@ class MainActivity : AppCompatActivity() {
         const val KEY_HUB_URL = "hub_url"
         private const val KEY_ASKED_NOTIFICATIONS = "asked_notifications"
         private const val KEY_HUB_NAME = "hub_name"
-        private const val MENU_CHANGE_HUB = 1
+        private const val MENU_CONNECTION = 1
     }
 }

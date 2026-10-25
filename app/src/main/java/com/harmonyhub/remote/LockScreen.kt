@@ -79,7 +79,7 @@ object LockScreen {
             .setShowWhen(false)
             .setCategory(Notification.CATEGORY_TRANSPORT)
             .setVisibility(Notification.VISIBILITY_PUBLIC)
-            .setStyle(Notification.MediaStyle().setShowActionsInCompactView(*IntArray(running.buttons.size) { it }))
+            .setStyle(Notification.MediaStyle().setShowActionsInCompactView(*compactActions(running)))
         running.buttons.forEachIndexed { index, button ->
             val press = PendingIntent.getBroadcast(
                 context, index,
@@ -91,9 +91,14 @@ object LockScreen {
         return builder.build()
     }
 
+    /** Android shows at most three actions in the collapsed notification; Mute waits for the expanded one. */
+    private fun compactActions(running: RunningActivity): IntArray =
+        running.buttons.indices.filter { running.buttons.size <= 3 || running.buttons[it].key != "mute" }.take(3).toIntArray()
+
     private fun iconFor(key: String) = when (key) {
         "volumedown" -> R.drawable.ic_lock_volume_down
         "volumeup" -> R.drawable.ic_lock_volume_up
+        "mute" -> R.drawable.ic_lock_mute
         else -> R.drawable.ic_lock_play
     }
 
