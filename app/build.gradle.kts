@@ -31,7 +31,7 @@ android {
     defaultConfig {
         // The app's identity on a phone: changing it later makes a different app (installs
         // side by side, settings not carried over). The code's package stays com.harmonyhub.remote.
-        applicationId = "io.github.mpdeglau.hubremote"
+        applicationId = "io.github.hzbench.hubremote"
         // Android 8.0+. Lower this if your phone is older than that.
         minSdk = 26
         targetSdk = 34
