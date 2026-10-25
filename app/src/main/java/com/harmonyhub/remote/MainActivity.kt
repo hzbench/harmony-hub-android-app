@@ -6,12 +6,12 @@ import android.app.Activity
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.SharedPreferences
+import android.content.res.ColorStateList
 import android.graphics.Bitmap
 import android.os.Build
 import android.os.Bundle
 import android.text.InputType
 import android.view.KeyEvent
-import android.content.res.ColorStateList
 import android.view.Menu
 import android.view.MenuItem
 import android.view.View
@@ -301,6 +301,7 @@ class MainActivity : AppCompatActivity() {
         loadFailed = false
         failedUrl = null
         supportActionBar?.show()   // the page hides it on remotes; a fresh load starts on a list
+        connectionState?.let { showConnection("connecting") }   // not "online" until the page says so
         showLoading()
         webView.loadUrl(HubAddress.entryUrl(url))
     }
@@ -314,6 +315,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun showError(url: String, message: String) {
         loadFailed = true
+        connectionState?.let { showConnection("offline") }
         failedUrl = url
         errorMessage.text = message
         loadingState.visibility = View.GONE
