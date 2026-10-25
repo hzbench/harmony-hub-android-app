@@ -23,13 +23,22 @@ jobs:
       matrix:
         include:
           - language: java-kotlin
+            build-mode: manual
           - language: actions
+            build-mode: none
     steps:
       - uses: actions/checkout@v4
       - uses: github/codeql-action/init@v3
         with:
           languages: ${{ matrix.language }}
-          build-mode: none
+          build-mode: ${{ matrix.build-mode }}
+      - if: matrix.build-mode == 'manual'
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - if: matrix.build-mode == 'manual'
+        run: ./gradlew assembleDebug --no-daemon
       - uses: github/codeql-action/analyze@v3
         with:
           category: /language:${{ matrix.language }}
