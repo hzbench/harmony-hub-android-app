@@ -29,19 +29,19 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
 Or open this `android-app/` folder in Android Studio, let it sync, and
-run it on a device over USB. This build installs as `io.github.mpdeglau.hubremote.debug`
+run it on a device over USB. This build installs as `io.github.hzbench.hubremote.debug`
 ("Hub Remote (debug)"), so for adb use that id:
-`adb shell am start -n io.github.mpdeglau.hubremote.debug/com.harmonyhub.remote.MainActivity`
-and `adb uninstall io.github.mpdeglau.hubremote.debug`. For the APK you give to friends
+`adb shell am start -n io.github.hzbench.hubremote.debug/com.harmonyhub.remote.MainActivity`
+and `adb uninstall io.github.hzbench.hubremote.debug`. For the APK you give to friends
 see *Release APK* below; don't use Android Studio's Generate Signed APK, which would sign
 with a different key than the one every update must be signed with. This app isn't going
 through the Play Store.
 
 ## Release APK (for you and friends)
 
-The app's id is `io.github.mpdeglau.hubremote` (the code's package is still
+The app's id is `io.github.hzbench.hubremote` (the code's package is still
 `com.harmonyhub.remote`). The id is the app's identity on a phone, so don't change it
-once friends have it. Debug builds use `...hubremote.debug` and are called "Hub Remote
+once friends have it. (In 0.3.0 and earlier it was `io.github.mpdeglau.hubremote`; it changed when the GitHub account was renamed; a phone with the old app needs the new one installed alongside, the hub address entered again, and the old one uninstalled. Android treats them as two different apps.) Debug builds use `...hubremote.debug` and are called "Hub Remote
 (debug)", so both can be installed together.
 
 1. **Signing key.** It lives outside the repo, in `~/.hub-remote-signing/`

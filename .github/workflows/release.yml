@@ -165,7 +165,7 @@ jobs:
           pkg=$(sed -n "s/^package: name='\([^']*\)'.*/\1/p" <<<"$badging")
           code=$(sed -n "s/^package:.* versionCode='\([^']*\)'.*/\1/p" <<<"$badging")
           vname=$(sed -n "s/^package:.* versionName='\([^']*\)'.*/\1/p" <<<"$badging")
-          [[ "$pkg" == "io.github.mpdeglau.hubremote" ]] || { echo "::error::The APK's package is '$pkg'"; exit 1; }
+          [[ "$pkg" == "io.github.hzbench.hubremote" ]] || { echo "::error::The APK's package is '$pkg'"; exit 1; }
           [[ "$code" == "$WANT_VERSION_CODE" ]] || { echo "::error::The APK's version code is '$code', not $WANT_VERSION_CODE"; exit 1; }
           [[ "$vname" == "$WANT_VERSION_NAME" ]] || { echo "::error::The APK's version name is '$vname', not $WANT_VERSION_NAME"; exit 1; }
 
