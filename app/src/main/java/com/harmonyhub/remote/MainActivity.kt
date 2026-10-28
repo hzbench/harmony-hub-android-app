@@ -90,7 +90,7 @@ class MainActivity : AppCompatActivity() {
     private val networkTracker = NetworkTracker()
     private val networkCallback = object : ConnectivityManager.NetworkCallback() {
         override fun onAvailable(network: Network) {
-            if (networkTracker.available(network)) runOnUiThread { networkChanged(true) }
+            if (networkTracker.available(network)) runOnUiThread { networkChanged(true) }  
         }
 
         override fun onLost(network: Network) {

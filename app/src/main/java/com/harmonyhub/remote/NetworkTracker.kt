@@ -1,20 +1,23 @@
 package com.harmonyhub.remote
 
 /**
- * Follows the phone's default network and says when "is there a network" changes, so the
- * WebView can be told. Kept free of Android classes so it can be unit-tested on the JVM.
+ * Follows the phone's default network and says when it changes, so the WebView can be told
+ * and the page can look for the hub again. Kept free of Android classes so it can be
+ * unit-tested on the JVM.
  *
- * Android can announce the new default network before it reports the old one lost; a loss
- * of a network that is no longer the default must not read as "offline".
+ * Any new default network counts, not only coming back from none: the hub is on the LAN, so
+ * Wi-Fi off falls back to mobile data (still "online") and Wi-Fi back on must re-check it.
+ * Android can also announce the new default before it reports the old one lost; a loss of a
+ * network that is no longer the default must not read as "offline".
  */
 class NetworkTracker {
     private var current: Any? = null
 
-    /** A network became the default. Returns true when that turned the phone from offline to online. */
+    /** A network was announced. Returns true when it is a different default network than before. */
     fun available(network: Any): Boolean {
-        val wasOffline = current == null
+        if (current == network) return false
         current = network
-        return wasOffline
+        return true
     }
 
     /** A network was lost. Returns true when the default network went away and none replaced it. */
