@@ -7,6 +7,8 @@ import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.SharedPreferences
 import android.content.res.ColorStateList
+import android.net.ConnectivityManager
+import android.net.Network
 import android.graphics.Bitmap
 import android.os.Build
 import android.os.Bundle
@@ -82,6 +84,36 @@ class MainActivity : AppCompatActivity() {
             fileCallback?.onReceiveValue(uris)
             fileCallback = null
         }
+
+    // The WebView only learns about connectivity changes if the app tells it (and Chromium can
+    // only watch them itself with ACCESS_NETWORK_STATE). Registered while this screen is in front.
+    private val networkTracker = NetworkTracker()
+    private val networkCallback = object : ConnectivityManager.NetworkCallback() {
+        override fun onAvailable(network: Network) {
+            if (networkTracker.available(network)) runOnUiThread { networkChanged(true) }  
+        }
+
+        override fun onLost(network: Network) {
+            if (networkTracker.lost(network)) runOnUiThread { networkChanged(false) }
+        }
+    }
+
+    private fun networkChanged(online: Boolean) {
+        webView.setNetworkAvailable(online)
+        // Same hook as the toolbar icon: re-check the hub now instead of at the page's next timer.
+        if (online) webView.evaluateJavascript("window.harmonyCheckConnection && window.harmonyCheckConnection()", null)
+    }
+
+    override fun onStart() {
+        super.onStart()
+        getSystemService(ConnectivityManager::class.java).registerDefaultNetworkCallback(networkCallback)
+    }
+
+    override fun onStop() {
+        getSystemService(ConnectivityManager::class.java).unregisterNetworkCallback(networkCallback)
+        networkTracker.reset()
+        super.onStop()
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
