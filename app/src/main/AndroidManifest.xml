@@ -3,6 +3,8 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Lets the WebView see the network come and go, so the page reconnects without leaving the app. -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <!-- Android 13+: the lock-screen buttons are a notification. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
