@@ -7,7 +7,7 @@ import org.junit.Before
 import org.junit.Test
 
 /** A one-thread HTTP server on a plain socket (the JDK's own is not on the unit-test classpath). */
-private class TinyServer(private val respond: (method: String, path: String, headers: Map<String, String>, body: String) -> Pair<Int, String>) {
+internal class TinyServer(private val respond: (method: String, path: String, headers: Map<String, String>, body: String) -> Pair<Int, String>) {
     private val socket = java.net.ServerSocket(0, 50, java.net.InetAddress.getByName("127.0.0.1"))
     val port get() = socket.localPort
     private val thread = Thread {

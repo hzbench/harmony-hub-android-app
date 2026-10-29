@@ -77,6 +77,8 @@ dependencies {
     implementation("androidx.appcompat:appcompat:1.8.0")
     implementation("androidx.activity:activity-ktx:1.9.1")
 
+    implementation("androidx.work:work-runtime:2.9.1")
+
     testImplementation("junit:junit:4.13.2")
     // Android bundles org.json; plain JVM unit tests need the real thing.
     testImplementation("org.json:json:20260814")
