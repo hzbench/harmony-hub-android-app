@@ -35,7 +35,8 @@ internal class TinyServer(private val respond: (method: String, path: String, he
             // closed
         }
     }.apply { isDaemon = true; start() }
-    fun stop() = socket.close()
+    // Waits for the accept loop to end, so a request sent right after stop() finds nothing listening (not a half-closed server).
+    fun stop() { socket.close(); thread.join(2000) }
 }
 
 class HubClientTest {
