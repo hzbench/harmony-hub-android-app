@@ -65,11 +65,11 @@ object UpdateNotifier {
             val results = Updates.check(applicationContext)
             announce(applicationContext, results)
             val settings = UpdateSettings(applicationContext)
-            // The hub's bundle is a few megabytes; an app is a few as well. Only on Wi-Fi, only if asked for.
+            // The hub's bundle is a few megabytes. Only on Wi-Fi, only if asked for.
             if (settings.autoDownloadOnWifi && Updates.onUnmeteredNetwork(applicationContext)) {
                 for (r in results) {
                     val release = r.available ?: continue
-                    if (r.kind == UpdateKind.APP && Updates.isDebugBuild(applicationContext)) continue
+                    if (r.kind == UpdateKind.APP) continue   // the app is downloaded by hand, from its release page
                     try { Updates.download(applicationContext, r.kind, release) } catch (e: UpdateException) { /* offered again by hand */ }
                 }
             }

@@ -6,7 +6,6 @@ import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
-import android.provider.Settings
 import android.text.format.DateUtils
 import android.view.MenuItem
 import android.view.View
@@ -21,8 +20,6 @@ import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.Toolbar
-import androidx.core.content.FileProvider
-import java.io.File
 import java.util.concurrent.Executors
 
 /**
@@ -165,7 +162,7 @@ class UpdatesActivity : AppCompatActivity() {
             addView(line(getString(R.string.update_debug_build), secondary = true))
             return@apply
         }
-        addView(button(getString(R.string.update_install)) { if (release != null) confirmInstall(kind, release) else runCheck(then = kind) }.apply { isEnabled = busy == null })
+        addView(button(getString(if (kind == UpdateKind.APP) R.string.update_download else R.string.update_install)) { if (release != null) confirmInstall(kind, release) else runCheck(then = kind) }.apply { isEnabled = busy == null })
         addView(button(getString(R.string.update_skip)) {
             settings.skip(kind, version)
             settings.setFound(kind, null)
@@ -194,22 +191,13 @@ class UpdatesActivity : AppCompatActivity() {
         val message = if (kind == UpdateKind.HUB) R.string.update_hub_confirm else R.string.update_app_confirm
         AlertDialog.Builder(this)
             .setMessage(getString(message, release.version.toString()))
-            .setPositiveButton(R.string.update_install) { _, _ -> install(kind, release) }
+            .setPositiveButton(if (kind == UpdateKind.APP) R.string.update_download else R.string.update_install) { _, _ -> install(kind, release) }
             .setNegativeButton(R.string.button_cancel, null)
             .show()
     }
 
     private fun install(kind: UpdateKind, release: Release) {
-        if (kind == UpdateKind.APP && !packageManager.canRequestPackageInstalls()) {
-            AlertDialog.Builder(this)
-                .setMessage(R.string.update_allow_installs)
-                .setPositiveButton(R.string.update_open_settings) { _, _ ->
-                    startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:$packageName")))
-                }
-                .setNegativeButton(R.string.button_cancel, null)
-                .show()
-            return
-        }
+        if (kind == UpdateKind.APP) { openAppDownload(release); return }
         busyKind = kind
         busy = getString(R.string.update_downloading)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)   // a hub update must not be cut short by the screen going off
@@ -221,17 +209,12 @@ class UpdatesActivity : AppCompatActivity() {
                 val file = Updates.download(applicationContext, kind, release) { got, total ->
                     if (total > 0) say(getString(R.string.update_downloading_percent, (got * 100 / total).toInt()))
                 }
-                if (kind == UpdateKind.HUB) {
-                    done = when (val outcome = Updates.installHub(applicationContext, file, say)) {
-                        is HubUpdater.Outcome.Updated -> getString(R.string.update_hub_done, outcome.version)
-                        is HubUpdater.Outcome.RolledBack -> getString(R.string.update_hub_rolled_back, outcome.version, outcome.result)
-                        is HubUpdater.Outcome.Unclear -> getString(R.string.update_hub_unclear, outcome.version, outcome.result)
-                    }
-                    file.delete()
-                } else {
-                    ui.post { handOverApk(file) }
-                    done = getString(R.string.update_app_handed_over)
+                done = when (val outcome = Updates.installHub(applicationContext, file, say)) {
+                    is HubUpdater.Outcome.Updated -> getString(R.string.update_hub_done, outcome.version)
+                    is HubUpdater.Outcome.RolledBack -> getString(R.string.update_hub_rolled_back, outcome.version, outcome.result)
+                    is HubUpdater.Outcome.Unclear -> getString(R.string.update_hub_unclear, outcome.version, outcome.result)
                 }
+                file.delete()
             } catch (e: UpdateException) {
                 done = e.message ?: getString(R.string.update_failed)
             }
@@ -247,14 +230,20 @@ class UpdatesActivity : AppCompatActivity() {
         }
     }
 
-    /** Android shows its own confirmation, and refuses anything not signed with this app's key. */
-    private fun handOverApk(file: File) {
-        val uri = FileProvider.getUriForFile(this, "$packageName.updates", file)
-        val intent = Intent(Intent.ACTION_VIEW)
-            .setDataAndType(uri, "application/vnd.android.package-archive")
-            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        try { startActivity(intent) } catch (e: ActivityNotFoundException) {
-            AlertDialog.Builder(this).setMessage(R.string.update_no_installer).setPositiveButton(android.R.string.ok, null).show()
+    /**
+     * The app cannot install itself (that would take the permission to install other apps, which makes Play
+     * Protect distrust it). It opens the release file in the browser instead: the browser downloads it, and tapping
+     * the downloaded file starts Android's own installer, which refuses anything not signed with this app's key.
+     */
+    private fun openAppDownload(release: Release) {
+        val asset = release.asset(UpdateKind.APP.assetName(release.version))
+        val url = asset?.url
+        if (url == null) {
+            AlertDialog.Builder(this).setMessage(R.string.update_failed).setPositiveButton(android.R.string.ok, null).show()
+            return
+        }
+        try { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) } catch (e: ActivityNotFoundException) {
+            AlertDialog.Builder(this).setMessage(R.string.update_no_browser).setPositiveButton(android.R.string.ok, null).show()
         }
     }
 }
