@@ -15,7 +15,7 @@ class HubClient(hubUrl: String, private val cookie: String?, private val budgetM
         data class Failed(val message: String) : Result()
     }
 
-    private val base = if (hubUrl.endsWith("/")) hubUrl else "$hubUrl/"
+    private val http = HubHttp(hubUrl, cookie)
 
     /** Both calls share one budget, so a button press never outlasts the ~10 s a broadcast is allowed. */
     fun press(button: LockButton): Result {
@@ -45,16 +45,25 @@ class HubClient(hubUrl: String, private val cookie: String?, private val budgetM
         else -> "The hub answered with an error ($status)."
     })
 
-    private class Reply(val status: Int, val body: String)
-
-    private fun request(method: String, path: String, body: String?, csrf: String?, deadline: Long): Reply {
+    private fun request(method: String, path: String, body: String?, csrf: String?, deadline: Long): HubHttp.Reply {
         val left = (deadline - System.nanoTime()) / 1_000_000
         if (left <= 0) throw java.net.SocketTimeoutException("out of time")
+        return http.request(method, path, body, csrf, left)
+    }
+}
+
+/** One request to the hub with the pairing cookie: JSON in, status and body out. Pure JVM. */
+class HubHttp(hubUrl: String, private val cookie: String?) {
+    class Reply(val status: Int, val body: String)
+
+    private val base = if (hubUrl.endsWith("/")) hubUrl else "$hubUrl/"
+
+    fun request(method: String, path: String, body: String?, csrf: String?, timeoutMs: Long): Reply {
         val connection = URL(base + path).openConnection() as HttpURLConnection
         try {
             connection.requestMethod = method
-            connection.connectTimeout = minOf(3000L, left).toInt()
-            connection.readTimeout = left.toInt()
+            connection.connectTimeout = minOf(3000L, timeoutMs).toInt()
+            connection.readTimeout = timeoutMs.toInt()
             connection.instanceFollowRedirects = false
             if (!cookie.isNullOrBlank()) connection.setRequestProperty("Cookie", cookie)
             if (body != null) {

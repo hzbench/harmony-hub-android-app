@@ -73,6 +73,8 @@ class MainActivity : AppCompatActivity() {
             if (granted) LockScreen.update(this, RunningActivity.parse(prefs.getString(LockScreen.KEY_RUNNING, null)))
         }
 
+    private val updateCheck = java.util.concurrent.Executors.newSingleThreadExecutor()
+
     // The page's file input (Setup > Software update) asks for a file; WebView does nothing
     // unless the app answers. At most one request is open; its callback must be answered once.
     private var fileCallback: ValueCallback<Array<Uri>>? = null
@@ -160,6 +162,22 @@ class MainActivity : AppCompatActivity() {
             promptForHubAddress()
         } else {
             load(hubUrl)
+        }
+        lookForUpdates()
+    }
+
+    /** Settings > "when the app opens": a quiet check, at most hourly; a found update is announced, never installed. */
+    private fun lookForUpdates() {
+        UpdateNotifier.schedule(applicationContext)
+        val settings = UpdateSettings(this)
+        if (!CheckSchedule.dueOnOpen(settings.checkMode, settings.lastCheckAt, System.currentTimeMillis())) return
+        val app = applicationContext
+        updateCheck.execute {
+            try {
+                UpdateNotifier.announce(app, Updates.check(app))
+            } catch (e: RuntimeException) {
+                // A failed look must never take the remote down with it.
+            }
         }
     }
 
@@ -409,6 +427,7 @@ class MainActivity : AppCompatActivity() {
     private var connectionState: String? = null
 
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
+        menu.add(Menu.NONE, MENU_SETTINGS, Menu.NONE, R.string.action_settings).setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER)
         connectionItem = menu.add(Menu.NONE, MENU_CONNECTION, Menu.NONE, R.string.connection_connecting).apply {
             setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
             isVisible = false
@@ -421,6 +440,10 @@ class MainActivity : AppCompatActivity() {
         if (item.itemId == MENU_CONNECTION) {
             // Same as tapping the page's own icon.
             webView.evaluateJavascript("window.harmonyCheckConnection && window.harmonyCheckConnection()", null)
+            return true
+        }
+        if (item.itemId == MENU_SETTINGS) {
+            startActivity(android.content.Intent(this, UpdatesActivity::class.java))
             return true
         }
         return super.onOptionsItemSelected(item)
@@ -472,5 +495,6 @@ class MainActivity : AppCompatActivity() {
         private const val KEY_ASKED_NOTIFICATIONS = "asked_notifications"
         private const val KEY_HUB_NAME = "hub_name"
         private const val MENU_CONNECTION = 1
+        private const val MENU_SETTINGS = 2
     }
 }
