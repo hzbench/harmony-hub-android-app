@@ -2,5 +2,5 @@
 // not guaranteed to be the current latest — accept Android Studio's
 // upgrade prompt on first sync if it offers newer AGP/Kotlin/Gradle.
 plugins {
-    id("com.android.application") version "9.4.1" apply false
+    id("com.android.application") version "9.5.0" apply false
 }
